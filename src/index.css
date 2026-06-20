@@ -2,8 +2,43 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/ibm-plex-mono/600.css';
 
 @custom-variant dark (&:is(.dark *));
+
+/* ---- Mockup-7 "Console Editor" palette (dark-only) ----
+   Exposed as Tailwind v4 @theme tokens → utilities like bg-panel, text-ink,
+   border-line, text-opus. The model hues (opus/sonnet/haiku) and honesty
+   colors (enforced/intended/estimate) are product-meaningful, not decoration. */
+@theme {
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  --color-base: oklch(0.16 0.02 250);
+  --color-panel: oklch(0.205 0.02 250);
+  --color-panel2: oklch(0.235 0.022 250);
+  --color-well: oklch(0.135 0.02 250);
+  --color-line: oklch(0.32 0.02 250);
+  --color-line-soft: oklch(0.27 0.02 250);
+  --color-ink: oklch(0.93 0.01 250);
+  --color-ink-dim: oklch(0.7 0.015 250);
+  --color-ink-faint: oklch(0.55 0.015 250);
+
+  /* functional model-family hues */
+  --color-opus: oklch(0.7 0.17 300);
+  --color-sonnet: oklch(0.74 0.14 230);
+  --color-haiku: oklch(0.78 0.16 150);
+  --color-led-inherit: oklch(0.66 0.01 250);
+  --color-rawid: oklch(0.7 0.2 350);
+
+  /* honesty colors */
+  --color-enforced: oklch(0.8 0.14 150);
+  --color-intended: oklch(0.8 0.11 85);
+  --color-estimate: oklch(0.7 0.015 250);
+  --color-danger: oklch(0.7 0.18 25);
+  --color-focus: oklch(0.85 0.13 200);
+}
 
 @theme inline {
   --font-heading: var(--font-sans);
