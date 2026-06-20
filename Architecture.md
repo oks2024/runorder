@@ -18,6 +18,8 @@ The product is **one canonical spec model with projections hanging off it.** Thi
 
 Exports are **one-way**. The model is authoritative; never re-import an edited script.
 
+> **Implementation status (2026-06-20).** This document is the design source of truth; the code now realizes most of it. Built: the canonical model (`src/spec/schema.ts`, `validate.ts`), the Zustand+Immer store (`src/store/workflowStore.ts`), the **prompt emitter** (`src/emit/promptEmitter.ts`), and the form-primary editor (`src/components/editor/`, mockup 7). Still deferred per `MVP.md`: the **graph view** (V1.1) and the **script emitter** (V2). The draft schema below is implemented largely as written (the V1 editor exposes only the `sequence`/`fanout` slice of the full recursive `PatternNode`).
+
 ## The two emitters (dual-strategy)
 
 Targeting Claude Code's native dynamic-workflow runtime means the runtime *executes the emitted JS literally* — a near-miss script errors, it is not "understood and adapted." But the runtime API for spawning agents / routing models is **undocumented and fast-moving** (research preview; the trigger keyword already changed `workflow` → `ultracode` between point releases). Hence two emitters:
@@ -36,13 +38,16 @@ Targeting Claude Code's native dynamic-workflow runtime means the runtime *execu
 
 The prompt path is the durable path, so it must be the *most* trustworthy. To keep Claude from silently "improving" the spec:
 
-1. Embed a **structured spec block** (JSON from the model), not prose.
+1. Emit a **single structured-Markdown artifact** — one human-readable, hand-editable, authoritative representation. **No separate JSON block.** The closed-set signal comes from the *constraint language*, not from JSON syntax (the braces were never the load-bearing thing). One representation means a hand-edit before pasting can't drift against a second copy.
 2. **Explicitly trigger the mechanism** (`ultracode` / "run this as a workflow") so Claude routes to the workflow runtime instead of doing the task inline.
-3. State the spec as **closed constraints**: "use exactly these agents, models, counts; do not add, remove, merge, or re-model any stage."
+3. State the spec as **closed constraints**: "use exactly these agents, models, and phases; do not add, remove, merge, or re-model any stage."
 4. Leave only the JS control-flow *implementation* to Claude; the spec owns the *what*.
 5. Ask Claude to **show the phase plan before running**, dovetailing with the built-in approval screen.
+6. Resolve model **aliases → canonical full ids** on emit (the alias is a UI convenience; the artifact must carry the id most likely to route correctly).
 
-Validate with a **faithfulness fixture suite**: run specs through the prompt path and diff the resulting phase plan against the spec.
+Export is **one-way**, and the primary loop is **edit-in-GUI-then-re-export**. Hand-editing the emitted artifact is allowed, but the moment the user does, the GUI no longer reflects what ran — and that's fine; the model was never reconstructed from the artifact.
+
+Validate with a **faithfulness fixture suite**: emit specs through the prompt path and diff the resulting Markdown phase plan against the spec. (Markdown is emitted deterministically from the model, so it snapshots/diffs as cleanly as JSON would.) **Whether Claude treats structured-Markdown as authoritatively as a fenced JSON payload is an empirical unknown — see `OpenQuestions.md`.** Fallback if it drifts: same content wrapped in one fenced block — still *one* representation, never two.
 
 ## Editing paradigm — form-primary
 
@@ -68,38 +73,47 @@ When a workflow genuinely needs custom control flow the pattern library can't ex
 
 | Field | Status | Notes |
 |---|---|---|
-| Name / role | first-class | identifier used in the graph and by other nodes |
-| **Model** | **enforced, headline** | dropdown from an **updatable config file** (not a hardcoded enum) + free-text raw-id escape + an explicit "inherit session model" option (the runtime default) |
+| Name / role | first-class | editable `name` (display label); a separate stable opaque `id` is what refs point at, so renaming never invalidates refs mid-edit |
+| **Model** | **enforced, headline** | **blended combobox** (Base UI): "inherit" pinned at top (default for a new agent), then the list from a **bundled static config** (`models.ts` — current Claude family + short aliases; swappable to runtime-fetch later), and typing an off-list string offers a **raw-id escape** with a soft "unverified" hint. Aliases resolve to canonical full ids on emit |
 | Prompt | first-class | the agent's instructions |
-| Caps | first-class | workflow-level concurrency (≤16) and total (≤1000); per-grant cap N on A+ delegations |
+| Caps | first-class | workflow-level concurrency (≤16) and total (≤1000); per-fanout `cap` (ceiling on parallel agents); per-grant cap N on A+ delegations (deferred) |
 | Tools | **omitted in V1** | deferred to V2 pending verification that the runtime enforces per-agent narrowing |
 
 ## Draft spec schema (starting point — not final)
+
+Decisions locked 2026-06-17 (design grill): **implicit positional data flow** (the tree *is* the data flow — no `inputsFrom`/`check` wiring in V1); **bare-string `AgentRef`** pointing at a **stable opaque `id`** with a **separate editable `name`**; fanout is **dynamic-N over prior output, bounded by `cap`** (cap is a ceiling, not a count).
 
 ```
 WorkflowSpec {
   name: string
   caps: { concurrency: int<=16, total: int<=1000 }
   agents: Agent[]
-  root: PatternNode            // composition tree
+  root: PatternNode            // composition tree (root is a sequence in V1)
 }
 Agent {
-  id: string                   // name/role, unique
-  model: "inherit" | <modelId> // enforced
+  id: string                   // stable opaque id (generated); never shown; refs point here
+  name: string                 // editable display label / role; emitter serializes by name
+  model: "inherit" | <modelId> // enforced; alias resolved to canonical id on emit
   prompt: string
 }
+AgentRef = string              // an Agent.id; dangling-ref check = id exists in agents[]
 PatternNode =
-  | { type: "sequence", steps: PatternNode[] }
-  | { type: "fanout", agent: AgentRef, inputsFrom: ..., cap: int }
+  | { type: "sequence", steps: PatternNode[] }            // implicit forward-passing of results
+  | { type: "fanout", agent: AgentRef, cap: int }         // maps over prior output, dynamic N, ≤ cap
+  // --- deferred patterns (model supports them; V1 editor does not expose) ---
   | { type: "mapReduce", map: {agent, cap}, reduce: AgentRef }
   | { type: "adversarial", producer: AgentRef, critic: AgentRef }
   | { type: "multiAngle", agent: AgentRef, angles: int, vote: AgentRef }
-  | { type: "iterateUntil", body: PatternNode, maxIter: int, check: ... }
+  | { type: "iterateUntil", body: PatternNode, maxIter: int }
   | { type: "agent", agent: AgentRef, grants?: Grant[] }   // A+ leaf
-Grant { agent: AgentRef, cap: int }   // capped delegation
+Grant { agent: AgentRef, cap: int }   // capped delegation (deferred; reintroduces cycle risk)
 ```
 
 Build this schema first — the prompt emitter, the future script emitter, and the graph are all serializers over it.
+
+**V1 editor vs. model:** the model is the full recursive `PatternNode` tree above, but the **V1 editor exposes only a flat ordered phase list** where each phase is either a single-agent step or a fanout. Deeper nesting is a model capability the editor catches up to in V1.1 — not a schema limitation.
+
+**Cycle detection is a no-op in V1:** a tree of `sequence`/`fanout` has no back-edges, so a cycle is structurally impossible. It becomes real only when `Grant` (A+ delegation) lands. Enforce the tree via the recursive schema; the only real graph check in V1 is the dangling `AgentRef`.
 
 ## Claude Code dynamic-workflow runtime — reference facts
 

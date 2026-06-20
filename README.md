@@ -1,73 +1,61 @@
-# React + TypeScript + Vite
+# Dynamic Workflow Editor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A client-side web app that lets semi-advanced Claude Code users **configure a multi-agent
+orchestration in a GUI and export it as a Claude Code native "dynamic workflow"** — the
+runtime-executed orchestration feature (triggered with `ultracode` / "run as a workflow"),
+**not** the standalone Claude Agent SDK.
 
-Currently, two official plugins are available:
+The point is **visibility and predictability**: which model each subagent uses, how many run,
+and the topology — the things a Claude-written workflow normally hides. You build the spec in a
+form, and the tool emits a single structured-Markdown artifact you paste into Claude Code, review
+on its approval screen, and run.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Status
 
-## React Compiler
+**MVP core implemented (2026-06-20); the manual run-and-verify proof is pending.** The spec model,
+state, prompt emitter, and editor UI are built and tested (39 tests; typecheck/lint/build clean).
+What remains for the MVP is to actually run an emitted artifact in Claude Code and diff the
+approval screen against the spec. See **Next steps** in [`CLAUDE.md`](./CLAUDE.md).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Quickstart
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # Vite dev server
+npm test           # Vitest (single run)
+npm run build      # typecheck + static dist/ (Cloudflare Pages target)
+npm run lint       # ESLint
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## How it works
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+The product is **one canonical spec model with projections hanging off it** — the single source of
+truth. Data flows model → state → output:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+| Layer | Location |
+|---|---|
+| Canonical spec model (Zod) + graph validation + seed | `src/spec/` |
+| Live state (Zustand + Immer) | `src/store/workflowStore.ts` |
+| Prompt emitter (the structured-Markdown artifact) | `src/emit/promptEmitter.ts` |
+| Editor UI — three panes (Agents · Composition · Emit) | `src/components/editor/` |
+| Bundled model config + helpers | `src/lib/` |
+
+Exports are **one-way**: the model is authoritative and is never reconstructed from an edited
+artifact.
+
+## Documentation
+
+| File | Contents |
+|---|---|
+| [`ProductDescription.md`](./ProductDescription.md) | Problem, audience, value prop, conceptual model, target runtime, non-goals |
+| [`Architecture.md`](./Architecture.md) | Canonical model + projections, the two emitters, editing paradigm, pattern vocabulary, schema |
+| [`MVP.md`](./MVP.md) | The V1 cut (in/out of scope), validation rules, build order, the proof |
+| [`OpenQuestions.md`](./OpenQuestions.md) | Empirical unknowns to resolve by running real workflows |
+| [`CLAUDE.md`](./CLAUDE.md) | Working guidance, code map, guardrails, and **Next steps** |
+| `mockups/` | The seven UI-direction mockups; mockup 7 is the chosen direction |
+
+## Tech stack
+
+TypeScript · React · Vite · Zod · Zustand + Immer · Tailwind v4 + shadcn/ui (Base UI) ·
+Vitest + React Testing Library · ESLint + Prettier. Pure static SPA (no backend in V1); deploys to
+Cloudflare Pages.

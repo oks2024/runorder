@@ -4,7 +4,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Scaffolded, no product logic yet (as of 2026-06-17).** The toolchain is in place (Vite + React + TS + Tailwind/shadcn + Zustand/Immer + Zod + Vitest) but no application code beyond a placeholder `App.tsx` exists. The design/specification docs remain the source of truth for *what* to build. Per `MVP.md`'s build order, the first thing to implement is the **canonical spec model / Zod schema** — everything else hangs off it.
+**MVP core implemented (as of 2026-06-20); the manual run-and-verify proof is still pending.** The full non-UI data path and the editor UI are built, tested, and committed on `main`. The design/specification docs remain the source of truth for *what* the product is.
+
+| Layer | Where | Notes |
+|---|---|---|
+| Canonical spec model | `src/spec/` | `schema.ts` (Zod model + `z.infer` types), `validate.ts` (graph pass: dangling-ref; cycle check is a documented no-op), `seed.ts` (the `code-review-loop` example) |
+| State | `src/store/workflowStore.ts` | Zustand + Immer; the single live `WorkflowSpec`; actions for caps, agent CRUD, flat phase-list ops |
+| Prompt emitter | `src/emit/promptEmitter.ts` | deterministic single structured-Markdown artifact; golden inline-snapshot guarded |
+| Editor UI (mockup 7) | `src/components/editor/` | three panes bound to the store; theme tokens + forced dark in `src/index.css` |
+| Shared helpers | `src/lib/` | `models.ts` (bundled Claude family + alias/family helpers), `estimate.ts` (run-size estimate) |
+
+Test suite: **39 passing** (schema, store, emitter snapshot, RTL UI). `npm run typecheck` / `lint` / `build` all clean.
+
+**Not done:** the MVP's actual proof — running the emitted artifact in Claude Code and diffing the approval screen against the spec (the thesis the whole product exists to test). See **Next steps**.
+
+## Next steps
+
+Priority order. Step 1 is the real MVP gate; the rest are deferred extensions, each additive (none requires redesigning the core).
+
+1. **Run the manual verify loop (the MVP proof).** `npm run dev`, load the `code-review-loop` seed, copy the emitted artifact, paste into Claude Code (**v2.1.154+**), and **diff the approval screen** (model per stage, topology, per-stage caps) against the spec. This is what resolves `OpenQuestions.md` #3–#5 (prompt-path faithfulness, whether structured-Markdown is treated as authoritatively as JSON, alias routing). Record findings there. Ground truth is the run, **not** Claude's "looks right".
+2. **Eyeball the UI** against `mockups/07-console-editor.html` (combobox popover, layout, dangling state) — built and unit-tested but not yet visually verified in a browser.
+3. **Deploy** the static `dist/` to Cloudflare Pages.
+4. **V1.1 — generated graph view:** the deferred headline visibility artifact (React Flow / `@xyflow`), a *derived* projection of the model (always correct because derived, never drawn).
+5. **V2 — script emitter:** the fragile second emitter (saved `/<name>` command). Reverse-engineer the undocumented runtime API, version-tag to a Claude Code release, validate by **running fixtures** — never by Claude's review.
+6. **Further deferred:** the other five patterns (map-reduce, adversarial, multi-angle+vote, iterate-until, A+ capped delegation), per-agent tools (pending a runtime-enforcement check), persistence/templates/sharing, Emit syntax coloring, light mode.
 
 ## What this is
 
@@ -52,10 +75,13 @@ Scaffolded 2026-06-17 (Vite `react-ts`). All commands verified working:
 ### Layout / conventions
 
 - `@/*` path alias → `src/*` (set in `vite.config.ts`, `tsconfig.app.json`, `tsconfig.json`).
+- `src/spec/`, `src/store/`, `src/emit/` — the model → state → output data path; tests are co-located (`*.test.ts`).
+- `src/components/editor/` — the mockup-7 editor (one component per pane/part, e.g. `AgentStrip`, `ModelCombobox`, `PhaseRow`); panes are controlled projections of the store — no second state, no forms library.
 - `src/components/ui/` — shadcn/ui components (copied in; not hand-edited, lint/prettier-ignored). Add more via `npx shadcn@latest add <name>`.
 - `src/lib/utils.ts` — shadcn `cn()` helper.
 - `src/test/setup.ts` — Vitest setup (jest-dom matchers + RTL cleanup); Vitest config lives in `vite.config.ts` (`environment: jsdom`, globals on).
-- Design tokens / Tailwind theme: `src/index.css` (Tailwind v4, `@theme inline`). shadcn uses **Base UI** (`@base-ui/react`), the successor to Radix.
+- Design tokens / Tailwind theme: `src/index.css` (Tailwind v4). The shadcn neutral theme stays in the `@theme inline` block; the mockup-7 **dark-only** palette (panel/well/ink scale, model-family hues, enforced/intended honesty colors, IBM Plex Mono) is a second `@theme` block exposed as utilities (`bg-panel`, `text-ink`, `text-opus`, …). Dark is forced via `class="dark"` on `<html>` (`index.html`). shadcn uses **Base UI** (`@base-ui/react`), the successor to Radix; the model picker (`ModelCombobox`) is built on `@base-ui/react/combobox`.
+- **Validation is continuous:** the TopBar status pill is derived live from `validateSpec` every render — there is no separate "Validate" button (it would be a no-op).
 
 ## Non-negotiable guardrails (do not violate when implementing)
 
