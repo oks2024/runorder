@@ -64,6 +64,13 @@ function renderPhase(spec: WorkflowSpec, node: PatternNode, index: number): stri
         `${over} (dynamic-N, cap ${node.cap})`
       )
     }
+    case 'iterateUntil': {
+      const who = node.body.type === 'agent' ? agentName(spec, node.body.agent) : `(${node.body.type} body)`
+      return (
+        `${n}. ${'loop'.padEnd(PHASE_LABEL_WIDTH)} — ${who} ` +
+        `repeated until it reports done (≤ ${node.maxIter} iterations)`
+      )
+    }
     default:
       // Deferred patterns aren't exposed by the V1 editor; render rather than crash.
       return `${n}. ${node.type.padEnd(PHASE_LABEL_WIDTH)} — (pattern not yet rendered)`

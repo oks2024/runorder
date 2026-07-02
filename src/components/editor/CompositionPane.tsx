@@ -7,6 +7,7 @@ export function CompositionPane() {
   const phases = useWorkflowStore((s) => (s.spec.root.type === 'sequence' ? s.spec.root.steps : []))
   const addStep = useWorkflowStore((s) => s.addStep)
   const addFanout = useWorkflowStore((s) => s.addFanout)
+  const addLoop = useWorkflowStore((s) => s.addLoop)
 
   return (
     <Pane
@@ -25,12 +26,14 @@ export function CompositionPane() {
         Ordered phases run top → down. Data flow is <b className="font-semibold text-ink-dim">implicit</b>:
         each phase passes its results forward. A{' '}
         <b className="font-semibold text-ink-dim">fan-out</b> maps the prior phase's output over one
-        agent (dynamic count, bounded by its cap).
+        agent (dynamic count, bounded by its cap). A{' '}
+        <b className="font-semibold text-ink-dim">loop</b> repeats one agent until it reports done
+        (bounded by max iterations).
       </div>
 
       {phases.map((node, i) => (
         <div key={i}>
-          {node.type === 'agent' || node.type === 'fanout' ? (
+          {node.type === 'agent' || node.type === 'fanout' || node.type === 'iterateUntil' ? (
             <PhaseRow node={node} index={i} count={phases.length} />
           ) : (
             <div className="mb-1 rounded-[10px] border border-dashed border-line p-2.5 font-mono text-[11px] text-ink-faint">
@@ -59,6 +62,13 @@ export function CompositionPane() {
           onClick={() => addFanout()}
         >
           + Fan-out
+        </button>
+        <button
+          type="button"
+          className="flex-1 rounded-[9px] border border-dashed border-line py-2 text-center font-mono text-xs text-ink-faint hover:border-intended/45 hover:text-intended focus-visible:outline-2 focus-visible:outline-focus"
+          onClick={() => addLoop()}
+        >
+          + Loop
         </button>
       </div>
     </Pane>

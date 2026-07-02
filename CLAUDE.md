@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Test suite: **47 passing** (schema, store, both emitter snapshots, RTL UI). `npm run typecheck` / `lint` / `build` all clean.
 
-**Proven by running (not review):** the emitted script shape executes end-to-end in the real runtime; the fan-out `toItems` handoff was caught under-splitting a plain-newline list and fixed, then re-run green. **Still open:** the *prompt-path* faithfulness (#3/#4) is untested (the proof exercised the script path); the fan-out string→items handoff is a heuristic (robust upgrade = give fan-out producers an output schema); topology editor still exposes only a flat step/fan-out list. See **Next steps**.
+**Proven by running (not review):** the emitted script shapes execute end-to-end in the real runtime — the fan-out `toItems` handoff (caught under-splitting a plain-newline list, fixed) and the **loop** (`iterateUntil` → bounded `for` with a `{done, output}` schema break; a fixture stopped early at iteration 3 of 5 as designed). The topology editor now covers **step / fan-out / loop**. **Still open:** the *prompt-path* faithfulness (#3/#4) is untested (the proof exercised the script path); the fan-out string→items handoff is a heuristic (robust upgrade = give fan-out producers an output schema); map-reduce, adversarial, multi-angle, and A+ delegation patterns remain. See **Next steps**.
 
 ## Next steps
 

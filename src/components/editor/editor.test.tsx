@@ -53,6 +53,14 @@ describe('Editor UI — store-bound behavior', () => {
     expect(script().textContent).toContain('{ title: "Phase 4"')
   })
 
+  it('+ Loop appends a loop phase reflected in the emitted script', () => {
+    render(<App />)
+    fireEvent.click(screen.getByText('+ Loop'))
+    expect(screen.getByText('↻ Loop')).toBeInTheDocument() // rendered in the composition pane
+    expect(script().textContent).toContain('for (let i = 0;') // emitted as a bounded loop
+    expect(script().textContent).toContain('loop — reviewer → claude-opus-4-8 (until done, ≤ 3)')
+  })
+
   it('deleting a referenced agent flips the validation pill to an issue', () => {
     render(<App />)
     expect(screen.getByText('Valid · 0 issues')).toBeInTheDocument()

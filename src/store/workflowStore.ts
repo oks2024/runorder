@@ -22,6 +22,8 @@ import type { Agent, WorkflowSpec } from '@/spec/schema'
 const CONCURRENCY_MAX = 16
 const TOTAL_MAX = 1000
 const FANOUT_CAP_MAX = 16
+const LOOP_ITER_MAX = 20
+const LOOP_ITER_DEFAULT = 3
 
 /** Editable subset of an agent (id is opaque/immutable; never patched). */
 export type AgentPatch = Partial<Pick<Agent, 'name' | 'model' | 'prompt'>>
@@ -43,11 +45,14 @@ export interface WorkflowState {
   // --- composition (flat phase list over root.steps) ---
   addStep: (agentId?: string) => void
   addFanout: (agentId?: string, cap?: number) => void
+  /** Append a loop: one body agent repeated up to `maxIter` (stops early when it reports done). */
+  addLoop: (agentId?: string, maxIter?: number) => void
   removePhase: (index: number) => void
   /** Reorder by swapping with the neighbor in `dir` (-1 up, +1 down); bounds-checked. */
   movePhase: (index: number, dir: -1 | 1) => void
   setPhaseAgent: (index: number, agentId: string) => void
   setFanoutCap: (index: number, cap: number) => void
+  setLoopMaxIter: (index: number, maxIter: number) => void
 
   // --- workspace ---
   /** Replace the whole spec (deep-cloned). Defaults to a fresh seed. */
@@ -138,6 +143,16 @@ export const useWorkflowStore = create<WorkflowState>()(
         })
       }),
 
+    addLoop: (agentId, maxIter) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        s.spec.root.steps.push({
+          type: 'iterateUntil',
+          body: { type: 'agent', agent: agentId ?? s.spec.agents[0]?.id ?? '' },
+          maxIter: clampInt(maxIter ?? LOOP_ITER_DEFAULT, 1, LOOP_ITER_MAX) ?? 1,
+        })
+      }),
+
     removePhase: (index) =>
       set((s) => {
         if (s.spec.root.type !== 'sequence') return
@@ -158,7 +173,10 @@ export const useWorkflowStore = create<WorkflowState>()(
       set((s) => {
         if (s.spec.root.type !== 'sequence') return
         const node = s.spec.root.steps[index]
-        if (node && (node.type === 'agent' || node.type === 'fanout')) node.agent = agentId
+        if (!node) return
+        if (node.type === 'agent' || node.type === 'fanout') node.agent = agentId
+        // A loop's editable agent is its (single-agent) body.
+        else if (node.type === 'iterateUntil' && node.body.type === 'agent') node.body.agent = agentId
       }),
 
     setFanoutCap: (index, cap) =>
@@ -167,6 +185,14 @@ export const useWorkflowStore = create<WorkflowState>()(
         const node = s.spec.root.steps[index]
         const v = clampInt(cap, 1, FANOUT_CAP_MAX)
         if (node?.type === 'fanout' && v !== undefined) node.cap = v
+      }),
+
+    setLoopMaxIter: (index, maxIter) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        const v = clampInt(maxIter, 1, LOOP_ITER_MAX)
+        if (node?.type === 'iterateUntil' && v !== undefined) node.maxIter = v
       }),
 
     load: (spec) =>

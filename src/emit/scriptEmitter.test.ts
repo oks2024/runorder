@@ -47,6 +47,58 @@ describe('emitScript — runtime-faithful contract', () => {
     expect(emitScript(spec)).toContain('throw new Error("Unresolved agent ref \\"ghost\\"')
   })
 
+  it('emits a bounded for-loop with a schema-driven break for a loop phase', () => {
+    const spec: WorkflowSpec = {
+      name: 'refine',
+      caps: { concurrency: 4, total: 100 },
+      agents: [{ id: 'w', name: 'writer', model: 'opus', prompt: 'Improve the draft.' }],
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'iterateUntil', body: { type: 'agent', agent: 'w' }, maxIter: 5 }],
+      },
+    }
+    const out = emitScript(spec)
+    expect(out).toContain('for (let i = 0; i < 5; i++)')
+    expect(out).toContain('const LOOP_SCHEMA = {')
+    expect(out).toContain('schema: LOOP_SCHEMA')
+    expect(out).toContain('if (it.done) break')
+    expect(out).toContain('detail: "loop — writer → claude-opus-4-8 (until done, ≤ 5)"')
+  })
+
+  it('defines asText when a later step forward-passes (regression: helpers gated only on fanout)', () => {
+    const spec: WorkflowSpec = {
+      name: 'two-step',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'a', name: 'a', model: 'inherit', prompt: 'do a' },
+        { id: 'b', name: 'b', model: 'inherit', prompt: 'do b' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'a' },
+          { type: 'agent', agent: 'b' },
+        ],
+      },
+    }
+    const out = emitScript(spec)
+    expect(out).toContain('asText(p1)') // step 2 forward-passes step 1
+    expect(out).toContain('function asText(x)') // …and the helper is defined
+    expect(out).not.toContain('function toItems') // no fanout → no toItems
+  })
+
+  it('omits helpers entirely for a single step (nothing to forward-pass)', () => {
+    const spec: WorkflowSpec = {
+      name: 'one-step',
+      caps: { concurrency: 4, total: 100 },
+      agents: [{ id: 'a', name: 'a', model: 'inherit', prompt: 'do a' }],
+      root: { type: 'sequence', steps: [{ type: 'agent', agent: 'a' }] },
+    }
+    const out = emitScript(spec)
+    expect(out).not.toContain('function asText')
+    expect(out).not.toContain('function toItems')
+  })
+
   it('is deterministic (same spec → identical output)', () => {
     expect(emitScript(codeReviewLoop)).toBe(emitScript(codeReviewLoop))
   })

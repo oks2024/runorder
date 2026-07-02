@@ -43,6 +43,18 @@ describe('emitPrompt — faithfulness contract', () => {
     expect(out).toContain('3. step    — synthesizer')
   })
 
+  it('renders a loop phase (repeat one agent until done, bounded by maxIter)', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      agents: [{ id: 'w', name: 'writer', model: 'opus', prompt: 'Improve the draft.' }],
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'iterateUntil', body: { type: 'agent', agent: 'w' }, maxIter: 5 }],
+      },
+    }
+    expect(emitPrompt(spec)).toContain('writer repeated until it reports done (≤ 5 iterations)')
+  })
+
   it('marks a dangling agent ref rather than dropping it silently', () => {
     const spec: WorkflowSpec = {
       ...codeReviewLoop,

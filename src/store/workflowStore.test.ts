@@ -122,4 +122,39 @@ describe('workflowStore — composition (phases)', () => {
     store.getState().setFanoutCap(0, 5) // phase 0 is a step
     expect(steps()[0]).toEqual({ type: 'agent', agent: 'reviewer' })
   })
+
+  it('appends a loop with a single-agent body and default maxIter', () => {
+    const n = steps().length
+    store.getState().addLoop('reviewer')
+    expect(steps()).toHaveLength(n + 1)
+    expect(steps()[n]).toEqual({
+      type: 'iterateUntil',
+      body: { type: 'agent', agent: 'reviewer' },
+      maxIter: 3,
+    })
+  })
+
+  it('clamps a loop maxIter on add and on set', () => {
+    store.getState().addLoop('reviewer', 999)
+    const idx = steps().length - 1
+    expect((steps()[idx] as { maxIter: number }).maxIter).toBe(20)
+    store.getState().setLoopMaxIter(idx, 5)
+    expect((steps()[idx] as { maxIter: number }).maxIter).toBe(5)
+  })
+
+  it('retargets a loop agent via its body', () => {
+    store.getState().addLoop('reviewer')
+    const idx = steps().length - 1
+    store.getState().setPhaseAgent(idx, 'synthesizer')
+    expect(steps()[idx]).toEqual({
+      type: 'iterateUntil',
+      body: { type: 'agent', agent: 'synthesizer' },
+      maxIter: 3,
+    })
+  })
+
+  it('keeps the spec schema-valid after adding a loop', () => {
+    store.getState().addLoop('reviewer')
+    expect(workflowSpecSchema.safeParse(spec()).success).toBe(true)
+  })
 })

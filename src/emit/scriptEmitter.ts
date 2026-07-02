@@ -33,12 +33,13 @@ function findAgent(spec: WorkflowSpec, ref: string) {
   return spec.agents.find((a) => a.id === ref) ?? null
 }
 
-/** The `opts` object literal for an `agent()` call: model (unless inherit) + label. */
-function agentOpts(model: string, label: string): string {
+/** The `opts` object literal for an `agent()` call: model (unless inherit) + label + extras. */
+function agentOpts(model: string, label: string, extra: string[] = []): string {
   const parts: string[] = []
   // `inherit` == use the session model == omit `model` entirely (that IS the default).
   if (model !== INHERIT) parts.push(`model: ${js(resolveAlias(model))}`)
   parts.push(`label: ${js(label)}`)
+  parts.push(...extra)
   return `{ ${parts.join(', ')} }`
 }
 
@@ -102,6 +103,36 @@ function renderPhase(
         outVar,
       }
     }
+    case 'iterateUntil': {
+      // V1 loops wrap a single body agent. Repeat it up to `maxIter`, carrying state forward;
+      // stop early when the agent reports `done` via a structured {done, output} schema — a
+      // real, runtime-enforced break condition (not an LLM-judged prose "until").
+      if (node.body.type !== 'agent') {
+        return {
+          code:
+            `phase(${js(title)})\n` +
+            `throw new Error(${js(`Loop body "${node.body.type}" is not supported — V1 loops wrap a single agent.`)})`,
+          outVar,
+        }
+      }
+      const agent = findAgent(spec, node.body.agent)
+      if (!agent) return { code: danglingThrow(node.body.agent, title), outVar }
+      return {
+        code:
+          `phase(${js(title)})\n` +
+          `let ${outVar} = ${input}\n` +
+          `for (let i = 0; i < ${node.maxIter}; i++) {\n` +
+          `  const it = await agent(\n` +
+          `    ${js(agent.prompt)} + "\\n\\nIteration " + (i + 1) + " of ${node.maxIter}. Prior state:\\n" + asText(${outVar}),\n` +
+          `    ${agentOpts(agent.model, agent.name, ['schema: LOOP_SCHEMA'])},\n` +
+          `  )\n` +
+          `  if (it == null) break\n` +
+          `  ${outVar} = it.output\n` +
+          `  if (it.done) break\n` +
+          `}`,
+        outVar,
+      }
+    }
     default:
       // Deferred patterns (mapReduce/adversarial/multiAngle/iterateUntil/sequence-nested):
       // fail loud rather than emit a silently-incomplete workflow. Workstream 3 fills these in.
@@ -121,28 +152,48 @@ function danglingThrow(ref: string, title: string): string {
   )
 }
 
-/** Small runtime helpers, emitted only when a fanout needs them. */
-function helpers(): string {
-  return [
-    '// --- generated helpers ---',
-    '// Coerce a prior phase result into a list of items to fan out over. Best-effort:',
-    '// arrays pass through; {items|findings} arrays are unwrapped; a string is split on blank',
-    '// lines / list markers, falling back to single newlines. This is a HEURISTIC — for a',
-    '// strict N, give the producing agent an output schema so it returns a real array.',
-    'function toItems(x) {',
-    '  if (Array.isArray(x)) return x',
-    '  if (x && Array.isArray(x.items)) return x.items',
-    '  if (x && Array.isArray(x.findings)) return x.findings',
-    '  if (x == null) return []',
-    '  const s = String(x).trim()',
-    '  let parts = s.split(/\\n{2,}|\\n(?=\\s*[-*\\d])/).map((p) => p.trim()).filter(Boolean)',
-    '  if (parts.length <= 1) parts = s.split(/\\n+/).map((p) => p.trim()).filter(Boolean)',
-    '  return parts',
-    '}',
-    'function asText(x) {',
-    '  return typeof x === "string" ? x : JSON.stringify(x, null, 2)',
-    '}',
-  ].join('\n')
+/** Small runtime helpers, emitted only when the body actually references them. */
+function helpers(need: { toItems: boolean; asText: boolean; loopSchema: boolean }): string {
+  const out: string[] = ['// --- generated helpers ---']
+  if (need.toItems) {
+    out.push(
+      '// Coerce a prior phase result into a list of items to fan out over. Best-effort:',
+      '// arrays pass through; {items|findings} arrays are unwrapped; a string is split on blank',
+      '// lines / list markers, falling back to single newlines. This is a HEURISTIC — for a',
+      '// strict N, give the producing agent an output schema so it returns a real array.',
+      'function toItems(x) {',
+      '  if (Array.isArray(x)) return x',
+      '  if (x && Array.isArray(x.items)) return x.items',
+      '  if (x && Array.isArray(x.findings)) return x.findings',
+      '  if (x == null) return []',
+      '  const s = String(x).trim()',
+      '  let parts = s.split(/\\n{2,}|\\n(?=\\s*[-*\\d])/).map((p) => p.trim()).filter(Boolean)',
+      '  if (parts.length <= 1) parts = s.split(/\\n+/).map((p) => p.trim()).filter(Boolean)',
+      '  return parts',
+      '}',
+    )
+  }
+  if (need.asText) {
+    out.push(
+      'function asText(x) {',
+      '  return typeof x === "string" ? x : JSON.stringify(x, null, 2)',
+      '}',
+    )
+  }
+  if (need.loopSchema) {
+    out.push(
+      '// A loop body reports whether it is done and the state to carry into the next iteration.',
+      'const LOOP_SCHEMA = {',
+      '  type: "object",',
+      '  properties: {',
+      '    done: { type: "boolean", description: "true when the task is complete; stops the loop" },',
+      '    output: { type: "string", description: "current result / working state to carry forward" },',
+      '  },',
+      '  required: ["done", "output"],',
+      '}',
+    )
+  }
+  return out.join('\n')
 }
 
 /** The `meta` block. `detail` surfaces the per-stage model on the approval screen. */
@@ -174,6 +225,12 @@ function phaseDetail(spec: WorkflowSpec, node: PatternNode): string {
       const who = a ? `${a.name} → ${renderModel(a.model)}` : `«missing agent: ${node.agent}»`
       return `fan-out — ${who} (dynamic-N, cap ${node.cap})`
     }
+    case 'iterateUntil': {
+      const ref = node.body.type === 'agent' ? node.body.agent : null
+      const a = ref ? findAgent(spec, ref) : null
+      const who = a ? `${a.name} → ${renderModel(a.model)}` : `«missing agent: ${ref ?? node.body.type}»`
+      return `loop — ${who} (until done, ≤ ${node.maxIter})`
+    }
     default:
       return `${node.type} — (not yet supported)`
   }
@@ -198,8 +255,17 @@ export function emitScript(spec: WorkflowSpec): string {
   const body = rendered.map((r) => r.code).join('\n\n')
   const ret = lastVar ? `return ${lastVar}` : 'return null'
 
+  const anyFanout = phases.some(hasFanout)
+  const anyLoop = phases.some((n) => n.type === 'iterateUntil')
+  // asText is used by fan-outs, loops, and any step past the first (forward-passed context).
+  const need = {
+    toItems: anyFanout,
+    asText: anyFanout || anyLoop || phases.length > 1,
+    loopSchema: anyLoop,
+  }
+
   const blocks = [header, '', renderMeta(spec)]
-  if (phases.some(hasFanout)) blocks.push('', helpers())
+  if (need.toItems || need.asText || need.loopSchema) blocks.push('', helpers(need))
   blocks.push('', body, '', ret)
 
   return blocks.join('\n')
