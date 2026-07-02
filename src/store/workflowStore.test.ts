@@ -157,4 +157,52 @@ describe('workflowStore — composition (phases)', () => {
     store.getState().addLoop('reviewer')
     expect(workflowSpecSchema.safeParse(spec()).success).toBe(true)
   })
+
+  it('appends map-reduce / adversarial / multi-angle / delegate, all schema-valid', () => {
+    store.getState().addMapReduce('investigator', 'synthesizer', 6)
+    store.getState().addAdversarial('reviewer', 'investigator')
+    store.getState().addMultiAngle('reviewer', 'synthesizer', 4)
+    store.getState().addDelegate('reviewer', 'investigator', 5)
+    const s = steps()
+    expect(s[s.length - 4]).toEqual({
+      type: 'mapReduce',
+      map: { agent: 'investigator', cap: 6 },
+      reduce: 'synthesizer',
+    })
+    expect(s[s.length - 3]).toEqual({ type: 'adversarial', producer: 'reviewer', critic: 'investigator' })
+    expect(s[s.length - 2]).toEqual({
+      type: 'multiAngle',
+      agent: 'reviewer',
+      angles: 4,
+      vote: 'synthesizer',
+    })
+    expect(s[s.length - 1]).toEqual({
+      type: 'agent',
+      agent: 'reviewer',
+      grants: [{ agent: 'investigator', cap: 5 }],
+    })
+    expect(workflowSpecSchema.safeParse(spec()).success).toBe(true)
+  })
+
+  it('routes primary/secondary agent setters per pattern', () => {
+    store.getState().addMapReduce('reviewer', 'synthesizer', 4)
+    const idx = steps().length - 1
+    store.getState().setPhaseAgent(idx, 'investigator') // primary = map agent
+    store.getState().setPhaseSecondaryAgent(idx, 'reviewer') // secondary = reduce
+    expect(steps()[idx]).toEqual({
+      type: 'mapReduce',
+      map: { agent: 'investigator', cap: 4 },
+      reduce: 'reviewer',
+    })
+  })
+
+  it('clamps map cap, angles, and grant cap', () => {
+    store.getState().addMapReduce('reviewer', 'synthesizer', 999)
+    store.getState().addMultiAngle('reviewer', 'synthesizer', 999)
+    store.getState().addDelegate('reviewer', 'investigator', 999)
+    const [mr, ma, dg] = steps().slice(-3)
+    expect((mr as { map: { cap: number } }).map.cap).toBe(16)
+    expect((ma as { angles: number }).angles).toBe(8)
+    expect((dg as { grants: { cap: number }[] }).grants[0].cap).toBe(16)
+  })
 })

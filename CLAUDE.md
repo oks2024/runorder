@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Layer | Where | Notes |
 |---|---|---|
-| Canonical spec model | `src/spec/` | `schema.ts` (Zod model + `z.infer` types), `validate.ts` (graph pass: dangling-ref; cycle check is a documented no-op), `seed.ts` (the `code-review-loop` example) |
+| Canonical spec model | `src/spec/` | `schema.ts` (Zod model + `z.infer` types), `validate.ts` (graph pass: dangling-ref + delegation-cycle detection over grant edges), `seed.ts` (the `code-review-loop` example) |
 | State | `src/store/workflowStore.ts` | Zustand + Immer; the single live `WorkflowSpec`; actions for caps, agent CRUD, flat phase-list ops |
 | Script emitter (primary) | `src/emit/scriptEmitter.ts` | deterministic runtime-valid `.js` (`meta`/`phase`/`agent({model})`/`parallel`); models executed literally = enforced; fan-out capped in-script; dangling refs `throw`; version-tagged (`RUNTIME_TAG`); golden-snapshot + run-validated |
 | Prompt emitter (fallback) | `src/emit/promptEmitter.ts` | deterministic single structured-Markdown artifact; durable across API churn but Claude authors the orchestration (model pin is a *request*); golden inline-snapshot guarded |
@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Test suite: **47 passing** (schema, store, both emitter snapshots, RTL UI). `npm run typecheck` / `lint` / `build` all clean.
 
-**Proven by running (not review):** the emitted script shapes execute end-to-end in the real runtime — the fan-out `toItems` handoff (caught under-splitting a plain-newline list, fixed) and the **loop** (`iterateUntil` → bounded `for` with a `{done, output}` schema break; a fixture stopped early at iteration 3 of 5 as designed). The topology editor now covers **step / fan-out / loop**. **Still open:** the *prompt-path* faithfulness (#3/#4) is untested (the proof exercised the script path); the fan-out string→items handoff is a heuristic (robust upgrade = give fan-out producers an output schema); map-reduce, adversarial, multi-angle, and A+ delegation patterns remain. See **Next steps**.
+**Proven by running (not review):** the emitted script shapes execute end-to-end in the real runtime — fan-out (`toItems` handoff, caught under-splitting a plain-newline list and fixed), **loop** (`iterateUntil` → bounded `for` + `{done, output}` schema break; stopped early at iteration 3 of 5), **map-reduce** (parallel map [2,3,4]→[4,6,8] → reduce sum 18), and **multi-angle** (3 parallel takes → vote picked the max). The topology editor now covers **all seven patterns** (step / fan-out / loop / map-reduce / adversarial / multi-angle / A+ delegation); grant delegation turns on real cycle detection in `validate.ts`. **Still open:** the *prompt-path* faithfulness (#3/#4) is untested (the proofs exercised the script path); the string→items handoff is a heuristic (robust upgrade = give producers an output schema). See **Next steps**.
 
 ## Next steps
 
@@ -28,7 +28,7 @@ Priority order. Step 1 is the real MVP gate; the rest are deferred extensions, e
 3. **Deploy** the static `dist/` to Cloudflare Pages.
 4. **V1.1 — generated graph view:** the deferred headline visibility artifact (React Flow / `@xyflow`), a *derived* projection of the model (always correct because derived, never drawn).
 5. **V2 — script emitter:** the fragile second emitter (saved `/<name>` command). Reverse-engineer the undocumented runtime API, version-tag to a Claude Code release, validate by **running fixtures** — never by Claude's review.
-6. **Further deferred:** the other five patterns (map-reduce, adversarial, multi-angle+vote, iterate-until, A+ capped delegation), per-agent tools (pending a runtime-enforcement check), persistence/templates/sharing, Emit syntax coloring, light mode.
+6. **Further deferred:** per-agent tools (pending a runtime-enforcement check), persistence/templates/sharing, Emit syntax coloring, light mode. *(The seven-pattern vocabulary — sequence, fan-out, loop, map-reduce, adversarial, multi-angle, A+ delegation — is now implemented and run-validated; a strict per-producer output schema for the fan-out/map handoff is the main remaining refinement.)*
 
 ## What this is
 

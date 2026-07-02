@@ -24,6 +24,8 @@ const TOTAL_MAX = 1000
 const FANOUT_CAP_MAX = 16
 const LOOP_ITER_MAX = 20
 const LOOP_ITER_DEFAULT = 3
+const ANGLES_MAX = 8
+const ANGLES_DEFAULT = 3
 
 /** Editable subset of an agent (id is opaque/immutable; never patched). */
 export type AgentPatch = Partial<Pick<Agent, 'name' | 'model' | 'prompt'>>
@@ -47,12 +49,26 @@ export interface WorkflowState {
   addFanout: (agentId?: string, cap?: number) => void
   /** Append a loop: one body agent repeated up to `maxIter` (stops early when it reports done). */
   addLoop: (agentId?: string, maxIter?: number) => void
+  /** Append a map-reduce: map one agent over prior output (capped), then a reduce agent merges. */
+  addMapReduce: (mapAgentId?: string, reduceAgentId?: string, cap?: number) => void
+  /** Append an adversarial pair: producer drafts, critic critiques. */
+  addAdversarial: (producerId?: string, criticId?: string) => void
+  /** Append a multi-angle: one agent from N angles, then a vote agent picks/synthesizes. */
+  addMultiAngle: (agentId?: string, voteId?: string, angles?: number) => void
+  /** Append an A+ delegate step: a lead agent empowered to delegate to a capped agent. */
+  addDelegate: (agentId?: string, grantAgentId?: string, cap?: number) => void
   removePhase: (index: number) => void
   /** Reorder by swapping with the neighbor in `dir` (-1 up, +1 down); bounds-checked. */
   movePhase: (index: number, dir: -1 | 1) => void
+  /** Set the primary agent of a phase (step/fanout/loop body/map/producer/angle). */
   setPhaseAgent: (index: number, agentId: string) => void
+  /** Set the secondary agent of a composite phase (reduce/critic/vote/grant target). */
+  setPhaseSecondaryAgent: (index: number, agentId: string) => void
   setFanoutCap: (index: number, cap: number) => void
   setLoopMaxIter: (index: number, maxIter: number) => void
+  setMapCap: (index: number, cap: number) => void
+  setAngles: (index: number, angles: number) => void
+  setGrantCap: (index: number, cap: number) => void
 
   // --- workspace ---
   /** Replace the whole spec (deep-cloned). Defaults to a fresh seed. */
@@ -153,6 +169,63 @@ export const useWorkflowStore = create<WorkflowState>()(
         })
       }),
 
+    addMapReduce: (mapAgentId, reduceAgentId, cap) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const first = s.spec.agents[0]?.id ?? ''
+        const second = s.spec.agents[1]?.id ?? first
+        s.spec.root.steps.push({
+          type: 'mapReduce',
+          map: {
+            agent: mapAgentId ?? first,
+            cap: clampInt(cap ?? s.spec.caps.concurrency, 1, FANOUT_CAP_MAX) ?? 1,
+          },
+          reduce: reduceAgentId ?? second,
+        })
+      }),
+
+    addAdversarial: (producerId, criticId) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const first = s.spec.agents[0]?.id ?? ''
+        const second = s.spec.agents[1]?.id ?? first
+        s.spec.root.steps.push({
+          type: 'adversarial',
+          producer: producerId ?? first,
+          critic: criticId ?? second,
+        })
+      }),
+
+    addMultiAngle: (agentId, voteId, angles) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const first = s.spec.agents[0]?.id ?? ''
+        const second = s.spec.agents[1]?.id ?? first
+        s.spec.root.steps.push({
+          type: 'multiAngle',
+          agent: agentId ?? first,
+          angles: clampInt(angles ?? ANGLES_DEFAULT, 1, ANGLES_MAX) ?? 1,
+          vote: voteId ?? second,
+        })
+      }),
+
+    addDelegate: (agentId, grantAgentId, cap) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const first = s.spec.agents[0]?.id ?? ''
+        const second = s.spec.agents[1]?.id ?? first
+        s.spec.root.steps.push({
+          type: 'agent',
+          agent: agentId ?? first,
+          grants: [
+            {
+              agent: grantAgentId ?? second,
+              cap: clampInt(cap ?? s.spec.caps.concurrency, 1, FANOUT_CAP_MAX) ?? 1,
+            },
+          ],
+        })
+      }),
+
     removePhase: (index) =>
       set((s) => {
         if (s.spec.root.type !== 'sequence') return
@@ -174,9 +247,23 @@ export const useWorkflowStore = create<WorkflowState>()(
         if (s.spec.root.type !== 'sequence') return
         const node = s.spec.root.steps[index]
         if (!node) return
-        if (node.type === 'agent' || node.type === 'fanout') node.agent = agentId
-        // A loop's editable agent is its (single-agent) body.
+        // The "primary" agent role, per pattern.
+        if (node.type === 'agent' || node.type === 'fanout' || node.type === 'multiAngle')
+          node.agent = agentId
         else if (node.type === 'iterateUntil' && node.body.type === 'agent') node.body.agent = agentId
+        else if (node.type === 'mapReduce') node.map.agent = agentId
+        else if (node.type === 'adversarial') node.producer = agentId
+      }),
+
+    setPhaseSecondaryAgent: (index, agentId) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        if (!node) return
+        if (node.type === 'mapReduce') node.reduce = agentId
+        else if (node.type === 'adversarial') node.critic = agentId
+        else if (node.type === 'multiAngle') node.vote = agentId
+        else if (node.type === 'agent' && node.grants?.[0]) node.grants[0].agent = agentId
       }),
 
     setFanoutCap: (index, cap) =>
@@ -193,6 +280,30 @@ export const useWorkflowStore = create<WorkflowState>()(
         const node = s.spec.root.steps[index]
         const v = clampInt(maxIter, 1, LOOP_ITER_MAX)
         if (node?.type === 'iterateUntil' && v !== undefined) node.maxIter = v
+      }),
+
+    setMapCap: (index, cap) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        const v = clampInt(cap, 1, FANOUT_CAP_MAX)
+        if (node?.type === 'mapReduce' && v !== undefined) node.map.cap = v
+      }),
+
+    setAngles: (index, angles) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        const v = clampInt(angles, 1, ANGLES_MAX)
+        if (node?.type === 'multiAngle' && v !== undefined) node.angles = v
+      }),
+
+    setGrantCap: (index, cap) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        const v = clampInt(cap, 1, FANOUT_CAP_MAX)
+        if (node?.type === 'agent' && node.grants?.[0] && v !== undefined) node.grants[0].cap = v
       }),
 
     load: (spec) =>

@@ -43,12 +43,27 @@ function agentOpts(model: string, label: string, extra: string[] = []): string {
   return `{ ${parts.join(', ')} }`
 }
 
-/** True if any node in the tree is a `fanout` (drives whether helpers are emitted). */
-function hasFanout(node: PatternNode): boolean {
-  if (node.type === 'fanout') return true
-  if (node.type === 'sequence') return node.steps.some(hasFanout)
-  if (node.type === 'iterateUntil') return hasFanout(node.body)
-  return false
+/** JS expression suffix appending the prior phase's result as context (empty for phase 1). */
+function forwardSuffix(index: number, input: string): string {
+  return index === 0 ? '' : ` + "\\n\\nInput from the previous phase:\\n" + asText(${input})`
+}
+
+/** Like `agentOpts` but the label is a raw JS expression (for per-instance labels). */
+function optsExprDynamicLabel(model: string, labelExpr: string, extra: string[] = []): string {
+  const parts: string[] = []
+  if (model !== INHERIT) parts.push(`model: ${js(resolveAlias(model))}`)
+  parts.push(`label: ${labelExpr}`)
+  parts.push(...extra)
+  return `{ ${parts.join(', ')} }`
+}
+
+/** Does this node fan a prior result into items (needs the `toItems` helper)? */
+function usesToItems(node: PatternNode): boolean {
+  return (
+    node.type === 'fanout' ||
+    node.type === 'mapReduce' ||
+    (node.type === 'agent' && !!node.grants && node.grants.length > 0)
+  )
 }
 
 /**
@@ -70,15 +85,36 @@ function renderPhase(
     case 'agent': {
       const agent = findAgent(spec, node.agent)
       if (!agent) return { code: danglingThrow(node.agent, title), outVar }
-      const promptExpr =
-        index === 0
-          ? js(agent.prompt)
-          : `${js(agent.prompt)} + "\\n\\nInput from the previous phase:\\n" + asText(${input})`
+      const grant = node.grants && node.grants[0]
+      if (grant) {
+        // A+ capped delegation: the lead runs, then a capped fan-out of the granted agent
+        // works over the lead's output — bounded to `grant.cap` instances (the real guarantee).
+        const grantee = findAgent(spec, grant.agent)
+        if (!grantee) return { code: danglingThrow(grant.agent, title), outVar }
+        return {
+          code:
+            `phase(${js(title)})\n` +
+            `const ${outVar}_lead = await agent(\n` +
+            `  ${js(agent.prompt)}${forwardSuffix(index, input)},\n` +
+            `  ${agentOpts(agent.model, agent.name)},\n` +
+            `)\n` +
+            `// A+ capped delegation → ${grantee.name}, bounded to ${grant.cap} instance(s).\n` +
+            `const ${outVar} = (await parallel(\n` +
+            `  toItems(${outVar}_lead).slice(0, ${grant.cap}).map((item) => () =>\n` +
+            `    agent(\n` +
+            `      ${js(grantee.prompt)} + "\\n\\nDelegated sub-task:\\n" + asText(item),\n` +
+            `      ${agentOpts(grantee.model, grantee.name)},\n` +
+            `    ),\n` +
+            `  ),\n` +
+            `)).filter(Boolean)`,
+          outVar,
+        }
+      }
       return {
         code:
           `phase(${js(title)})\n` +
           `const ${outVar} = await agent(\n` +
-          `  ${promptExpr},\n` +
+          `  ${js(agent.prompt)}${forwardSuffix(index, input)},\n` +
           `  ${agentOpts(agent.model, agent.name)},\n` +
           `)`,
         outVar,
@@ -133,13 +169,80 @@ function renderPhase(
         outVar,
       }
     }
-    default:
-      // Deferred patterns (mapReduce/adversarial/multiAngle/iterateUntil/sequence-nested):
-      // fail loud rather than emit a silently-incomplete workflow. Workstream 3 fills these in.
+    case 'mapReduce': {
+      const mapAgent = findAgent(spec, node.map.agent)
+      if (!mapAgent) return { code: danglingThrow(node.map.agent, title), outVar }
+      const reduceAgent = findAgent(spec, node.reduce)
+      if (!reduceAgent) return { code: danglingThrow(node.reduce, title), outVar }
       return {
         code:
           `phase(${js(title)})\n` +
-          `throw new Error(${js(`Pattern "${node.type}" is not yet supported by the script emitter — regenerate after upgrading the editor.`)})`,
+          `const ${outVar}_mapped = (await parallel(\n` +
+          `  toItems(${input}).slice(0, ${node.map.cap}).map((item) => () =>\n` +
+          `    agent(\n` +
+          `      ${js(mapAgent.prompt)} + "\\n\\nInput:\\n" + asText(item),\n` +
+          `      ${agentOpts(mapAgent.model, mapAgent.name)},\n` +
+          `    ),\n` +
+          `  ),\n` +
+          `)).filter(Boolean)\n` +
+          `const ${outVar} = await agent(\n` +
+          `  ${js(reduceAgent.prompt)} + "\\n\\nItems to merge:\\n" + asText(${outVar}_mapped),\n` +
+          `  ${agentOpts(reduceAgent.model, reduceAgent.name)},\n` +
+          `)`,
+        outVar,
+      }
+    }
+    case 'adversarial': {
+      const producer = findAgent(spec, node.producer)
+      if (!producer) return { code: danglingThrow(node.producer, title), outVar }
+      const critic = findAgent(spec, node.critic)
+      if (!critic) return { code: danglingThrow(node.critic, title), outVar }
+      return {
+        code:
+          `phase(${js(title)})\n` +
+          `const ${outVar}_draft = await agent(\n` +
+          `  ${js(producer.prompt)}${forwardSuffix(index, input)},\n` +
+          `  ${agentOpts(producer.model, producer.name)},\n` +
+          `)\n` +
+          `const ${outVar}_critique = await agent(\n` +
+          `  ${js(critic.prompt)} + "\\n\\nProposal to critique:\\n" + asText(${outVar}_draft),\n` +
+          `  ${agentOpts(critic.model, critic.name)},\n` +
+          `)\n` +
+          `const ${outVar} = { draft: ${outVar}_draft, critique: ${outVar}_critique }`,
+        outVar,
+      }
+    }
+    case 'multiAngle': {
+      const worker = findAgent(spec, node.agent)
+      if (!worker) return { code: danglingThrow(node.agent, title), outVar }
+      const voter = findAgent(spec, node.vote)
+      if (!voter) return { code: danglingThrow(node.vote, title), outVar }
+      const angleLabel = `${js(worker.name + ' (angle ')} + (k + 1) + ${js(')')}`
+      return {
+        code:
+          `phase(${js(title)})\n` +
+          `const ${outVar}_takes = (await parallel(\n` +
+          `  Array.from({ length: ${node.angles} }, (_, k) => () =>\n` +
+          `    agent(\n` +
+          `      ${js(worker.prompt)} + "\\n\\nAngle " + (k + 1) + " of ${node.angles}. Input:\\n" + asText(${input}),\n` +
+          `      ${optsExprDynamicLabel(worker.model, angleLabel)},\n` +
+          `    ),\n` +
+          `  ),\n` +
+          `)).filter(Boolean)\n` +
+          `const ${outVar} = await agent(\n` +
+          `  ${js(voter.prompt)} + "\\n\\nCandidate answers:\\n" + asText(${outVar}_takes),\n` +
+          `  ${agentOpts(voter.model, voter.name)},\n` +
+          `)`,
+        outVar,
+      }
+    }
+    default:
+      // Only a nested `sequence` reaches here (all leaf patterns are handled). Fail loud
+      // rather than emit a silently-incomplete workflow.
+      return {
+        code:
+          `phase(${js(title)})\n` +
+          `throw new Error(${js(`Pattern "${node.type}" is not supported at the top level — flatten it in the editor.`)})`,
         outVar,
       }
   }
@@ -217,20 +320,24 @@ function renderMeta(spec: WorkflowSpec): string {
 function phaseDetail(spec: WorkflowSpec, node: PatternNode): string {
   switch (node.type) {
     case 'agent': {
-      const a = findAgent(spec, node.agent)
-      return a ? `step — ${a.name} → ${renderModel(a.model)}` : `step — «missing agent: ${node.agent}»`
+      const base = who(spec, node.agent)
+      const grant = node.grants && node.grants[0]
+      return grant
+        ? `step — ${base} (delegates ≤ ${grant.cap} to ${who(spec, grant.agent)})`
+        : `step — ${base}`
     }
-    case 'fanout': {
-      const a = findAgent(spec, node.agent)
-      const who = a ? `${a.name} → ${renderModel(a.model)}` : `«missing agent: ${node.agent}»`
-      return `fan-out — ${who} (dynamic-N, cap ${node.cap})`
-    }
+    case 'fanout':
+      return `fan-out — ${who(spec, node.agent)} (dynamic-N, cap ${node.cap})`
     case 'iterateUntil': {
       const ref = node.body.type === 'agent' ? node.body.agent : null
-      const a = ref ? findAgent(spec, ref) : null
-      const who = a ? `${a.name} → ${renderModel(a.model)}` : `«missing agent: ${ref ?? node.body.type}»`
-      return `loop — ${who} (until done, ≤ ${node.maxIter})`
+      return `loop — ${ref ? who(spec, ref) : `(${node.body.type} body)`} (until done, ≤ ${node.maxIter})`
     }
+    case 'mapReduce':
+      return `map-reduce — ${who(spec, node.map.agent)} ×${node.map.cap} → reduce ${who(spec, node.reduce)}`
+    case 'adversarial':
+      return `adversarial — ${who(spec, node.producer)} vs ${who(spec, node.critic)}`
+    case 'multiAngle':
+      return `multi-angle — ${who(spec, node.agent)} ×${node.angles} → vote ${who(spec, node.vote)}`
     default:
       return `${node.type} — (not yet supported)`
   }
@@ -238,6 +345,12 @@ function phaseDetail(spec: WorkflowSpec, node: PatternNode): string {
 
 function renderModel(model: string): string {
   return model === INHERIT ? 'session model' : resolveAlias(model)
+}
+
+/** "<name> → <model>" for a ref, or a marked missing-agent token. Used in `meta` details. */
+function who(spec: WorkflowSpec, ref: string): string {
+  const a = findAgent(spec, ref)
+  return a ? `${a.name} → ${renderModel(a.model)}` : `«missing agent: ${ref}»`
 }
 
 /** Build the complete runtime-valid workflow script for a spec. Pure; never mutates. */
@@ -255,13 +368,13 @@ export function emitScript(spec: WorkflowSpec): string {
   const body = rendered.map((r) => r.code).join('\n\n')
   const ret = lastVar ? `return ${lastVar}` : 'return null'
 
-  const anyFanout = phases.some(hasFanout)
-  const anyLoop = phases.some((n) => n.type === 'iterateUntil')
-  // asText is used by fan-outs, loops, and any step past the first (forward-passed context).
+  // asText is used by every composite pattern and by any step past the first (forward context).
+  const isComposite = (n: PatternNode) =>
+    n.type !== 'agent' || (!!n.grants && n.grants.length > 0)
   const need = {
-    toItems: anyFanout,
-    asText: anyFanout || anyLoop || phases.length > 1,
-    loopSchema: anyLoop,
+    toItems: phases.some(usesToItems),
+    asText: phases.length > 1 || phases.some(isComposite),
+    loopSchema: phases.some((n) => n.type === 'iterateUntil'),
   }
 
   const blocks = [header, '', renderMeta(spec)]

@@ -8,6 +8,13 @@ export function CompositionPane() {
   const addStep = useWorkflowStore((s) => s.addStep)
   const addFanout = useWorkflowStore((s) => s.addFanout)
   const addLoop = useWorkflowStore((s) => s.addLoop)
+  const addMapReduce = useWorkflowStore((s) => s.addMapReduce)
+  const addAdversarial = useWorkflowStore((s) => s.addAdversarial)
+  const addMultiAngle = useWorkflowStore((s) => s.addMultiAngle)
+  const addDelegate = useWorkflowStore((s) => s.addDelegate)
+
+  const addBtn =
+    'grow basis-[30%] rounded-[9px] border border-dashed border-line py-2 text-center font-mono text-xs text-ink-faint hover:border-intended/45 hover:text-intended focus-visible:outline-2 focus-visible:outline-focus'
 
   return (
     <Pane
@@ -33,11 +40,11 @@ export function CompositionPane() {
 
       {phases.map((node, i) => (
         <div key={i}>
-          {node.type === 'agent' || node.type === 'fanout' || node.type === 'iterateUntil' ? (
+          {node.type !== 'sequence' ? (
             <PhaseRow node={node} index={i} count={phases.length} />
           ) : (
             <div className="mb-1 rounded-[10px] border border-dashed border-line p-2.5 font-mono text-[11px] text-ink-faint">
-              {i + 1}. {node.type} — not editable in the V1 flat editor
+              {i + 1}. nested sequence — flatten it in the editor
             </div>
           )}
           {i < phases.length - 1 && (
@@ -48,27 +55,31 @@ export function CompositionPane() {
         </div>
       ))}
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
-          className="flex-1 rounded-[9px] border border-dashed border-line py-2 text-center font-mono text-xs text-ink-faint hover:border-ink-faint hover:text-ink-dim focus-visible:outline-2 focus-visible:outline-focus"
+          className="grow basis-[30%] rounded-[9px] border border-dashed border-line py-2 text-center font-mono text-xs text-ink-faint hover:border-ink-faint hover:text-ink-dim focus-visible:outline-2 focus-visible:outline-focus"
           onClick={() => addStep()}
         >
           + Step
         </button>
-        <button
-          type="button"
-          className="flex-1 rounded-[9px] border border-dashed border-line py-2 text-center font-mono text-xs text-ink-faint hover:border-intended/45 hover:text-intended focus-visible:outline-2 focus-visible:outline-focus"
-          onClick={() => addFanout()}
-        >
+        <button type="button" className={addBtn} onClick={() => addFanout()}>
           + Fan-out
         </button>
-        <button
-          type="button"
-          className="flex-1 rounded-[9px] border border-dashed border-line py-2 text-center font-mono text-xs text-ink-faint hover:border-intended/45 hover:text-intended focus-visible:outline-2 focus-visible:outline-focus"
-          onClick={() => addLoop()}
-        >
+        <button type="button" className={addBtn} onClick={() => addLoop()}>
           + Loop
+        </button>
+        <button type="button" className={addBtn} onClick={() => addMapReduce()}>
+          + Map-reduce
+        </button>
+        <button type="button" className={addBtn} onClick={() => addAdversarial()}>
+          + Adversarial
+        </button>
+        <button type="button" className={addBtn} onClick={() => addMultiAngle()}>
+          + Multi-angle
+        </button>
+        <button type="button" className={addBtn} onClick={() => addDelegate()}>
+          + Delegate
         </button>
       </div>
     </Pane>

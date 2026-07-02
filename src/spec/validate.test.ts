@@ -42,4 +42,44 @@ describe('validateSpec', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.issues).toHaveLength(1)
   })
+
+  it('flags a self-grant delegation cycle', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'agent', agent: 'reviewer', grants: [{ agent: 'reviewer', cap: 2 }] }],
+      },
+    }
+    const result = validateSpec(spec)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.issues[0]).toMatchObject({ code: 'delegation-cycle', ref: 'reviewer' })
+  })
+
+  it('flags a two-node delegation cycle (A delegates to B, B delegates to A)', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'reviewer', grants: [{ agent: 'investigator', cap: 2 }] },
+          { type: 'agent', agent: 'investigator', grants: [{ agent: 'reviewer', cap: 2 }] },
+        ],
+      },
+    }
+    const result = validateSpec(spec)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.issues.some((i) => i.code === 'delegation-cycle')).toBe(true)
+  })
+
+  it('accepts an acyclic delegation (A delegates to B, no back-edge)', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'agent', agent: 'reviewer', grants: [{ agent: 'investigator', cap: 2 }] }],
+      },
+    }
+    expect(validateSpec(spec)).toEqual({ ok: true })
+  })
 })

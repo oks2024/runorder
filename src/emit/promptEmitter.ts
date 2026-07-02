@@ -54,26 +54,43 @@ function renderAgents(spec: WorkflowSpec): string {
 /** One phase line (1-based). Handles the V1 set (step / fan-out); degrades for the rest. */
 function renderPhase(spec: WorkflowSpec, node: PatternNode, index: number): string {
   const n = index + 1
+  const label = (l: string) => `${n}. ${l.padEnd(PHASE_LABEL_WIDTH)} — `
   switch (node.type) {
-    case 'agent':
-      return `${n}. ${'step'.padEnd(PHASE_LABEL_WIDTH)} — ${agentName(spec, node.agent)}`
+    case 'agent': {
+      const grant = node.grants && node.grants[0]
+      const base = `${label('step')}${agentName(spec, node.agent)}`
+      return grant
+        ? `${base} (may delegate to ${agentName(spec, grant.agent)}, ≤ ${grant.cap} instances)`
+        : base
+    }
     case 'fanout': {
       const over = index === 0 ? 'over the workflow input' : `over phase ${index} output`
       return (
-        `${n}. ${'fan-out'.padEnd(PHASE_LABEL_WIDTH)} — ${agentName(spec, node.agent)} ` +
-        `${over} (dynamic-N, cap ${node.cap})`
+        `${label('fan-out')}${agentName(spec, node.agent)} ${over} (dynamic-N, cap ${node.cap})`
       )
     }
     case 'iterateUntil': {
       const who = node.body.type === 'agent' ? agentName(spec, node.body.agent) : `(${node.body.type} body)`
-      return (
-        `${n}. ${'loop'.padEnd(PHASE_LABEL_WIDTH)} — ${who} ` +
-        `repeated until it reports done (≤ ${node.maxIter} iterations)`
-      )
+      return `${label('loop')}${who} repeated until it reports done (≤ ${node.maxIter} iterations)`
     }
+    case 'mapReduce':
+      return (
+        `${label('map-red')}${agentName(spec, node.map.agent)} over prior output ` +
+        `(cap ${node.map.cap}), then ${agentName(spec, node.reduce)} reduces the results`
+      )
+    case 'adversarial':
+      return (
+        `${label('adv')}${agentName(spec, node.producer)} produces, ` +
+        `then ${agentName(spec, node.critic)} critiques it`
+      )
+    case 'multiAngle':
+      return (
+        `${label('multi')}${agentName(spec, node.agent)} from ${node.angles} angles, ` +
+        `then ${agentName(spec, node.vote)} votes on the best`
+      )
     default:
-      // Deferred patterns aren't exposed by the V1 editor; render rather than crash.
-      return `${n}. ${node.type.padEnd(PHASE_LABEL_WIDTH)} — (pattern not yet rendered)`
+      // Only a nested `sequence` reaches here; render rather than crash.
+      return `${label(node.type)}(pattern not yet rendered)`
   }
 }
 

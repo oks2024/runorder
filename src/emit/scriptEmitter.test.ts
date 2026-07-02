@@ -99,6 +99,76 @@ describe('emitScript — runtime-faithful contract', () => {
     expect(out).not.toContain('function toItems')
   })
 
+  it('emits map-reduce as a capped parallel map then a reduce agent', () => {
+    const spec: WorkflowSpec = {
+      name: 'mr',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'm', name: 'mapper', model: 'sonnet', prompt: 'map it' },
+        { id: 'r', name: 'reducer', model: 'opus', prompt: 'reduce it' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'mapReduce', map: { agent: 'm', cap: 6 }, reduce: 'r' }],
+      },
+    }
+    const out = emitScript(spec)
+    expect(out).toContain('toItems(args).slice(0, 6)')
+    expect(out).toContain('Items to merge:\\n" + asText(p1_mapped)')
+    expect(out).toContain('detail: "map-reduce — mapper → claude-sonnet-4-6 ×6 → reduce reducer → claude-opus-4-8"')
+  })
+
+  it('emits adversarial as producer then critic over the draft', () => {
+    const spec: WorkflowSpec = {
+      name: 'adv',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'p', name: 'maker', model: 'opus', prompt: 'make it' },
+        { id: 'c', name: 'breaker', model: 'sonnet', prompt: 'break it' },
+      ],
+      root: { type: 'sequence', steps: [{ type: 'adversarial', producer: 'p', critic: 'c' }] },
+    }
+    const out = emitScript(spec)
+    expect(out).toContain('const p1_draft = await agent(')
+    expect(out).toContain('Proposal to critique:\\n" + asText(p1_draft)')
+    expect(out).toContain('const p1 = { draft: p1_draft, critique: p1_critique }')
+  })
+
+  it('emits multi-angle as N parallel takes then a vote agent', () => {
+    const spec: WorkflowSpec = {
+      name: 'ma',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'w', name: 'thinker', model: 'sonnet', prompt: 'consider' },
+        { id: 'v', name: 'judge', model: 'opus', prompt: 'pick best' },
+      ],
+      root: { type: 'sequence', steps: [{ type: 'multiAngle', agent: 'w', angles: 3, vote: 'v' }] },
+    }
+    const out = emitScript(spec)
+    expect(out).toContain('Array.from({ length: 3 }, (_, k) => () =>')
+    expect(out).toContain('label: "thinker (angle " + (k + 1) + ")"')
+    expect(out).toContain('Candidate answers:\\n" + asText(p1_takes)')
+  })
+
+  it('emits A+ delegation as a lead agent then a capped fan-out of the grantee', () => {
+    const spec: WorkflowSpec = {
+      name: 'delegate',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'lead', name: 'lead', model: 'opus', prompt: 'lead it' },
+        { id: 'inv', name: 'inv', model: 'sonnet', prompt: 'investigate' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'agent', agent: 'lead', grants: [{ agent: 'inv', cap: 4 }] }],
+      },
+    }
+    const out = emitScript(spec)
+    expect(out).toContain('const p1_lead = await agent(')
+    expect(out).toContain('toItems(p1_lead).slice(0, 4)')
+    expect(out).toContain('detail: "step — lead → claude-opus-4-8 (delegates ≤ 4 to inv → claude-sonnet-4-6)"')
+  })
+
   it('is deterministic (same spec → identical output)', () => {
     expect(emitScript(codeReviewLoop)).toBe(emitScript(codeReviewLoop))
   })

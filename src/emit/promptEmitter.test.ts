@@ -55,6 +55,30 @@ describe('emitPrompt — faithfulness contract', () => {
     expect(emitPrompt(spec)).toContain('writer repeated until it reports done (≤ 5 iterations)')
   })
 
+  it('renders the composite patterns (map-reduce, adversarial, multi-angle, delegate)', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      agents: [
+        { id: 'a', name: 'alpha', model: 'opus', prompt: 'a' },
+        { id: 'b', name: 'beta', model: 'sonnet', prompt: 'b' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'mapReduce', map: { agent: 'a', cap: 4 }, reduce: 'b' },
+          { type: 'adversarial', producer: 'a', critic: 'b' },
+          { type: 'multiAngle', agent: 'a', angles: 3, vote: 'b' },
+          { type: 'agent', agent: 'a', grants: [{ agent: 'b', cap: 2 }] },
+        ],
+      },
+    }
+    const out = emitPrompt(spec)
+    expect(out).toContain('alpha over prior output (cap 4), then beta reduces the results')
+    expect(out).toContain('alpha produces, then beta critiques it')
+    expect(out).toContain('alpha from 3 angles, then beta votes on the best')
+    expect(out).toContain('may delegate to beta, ≤ 2 instances')
+  })
+
   it('marks a dangling agent ref rather than dropping it silently', () => {
     const spec: WorkflowSpec = {
       ...codeReviewLoop,
