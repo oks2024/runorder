@@ -4,25 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**MVP core implemented (as of 2026-06-20); the manual run-and-verify proof is still pending.** The full non-UI data path and the editor UI are built, tested, and committed on `main`. The design/specification docs remain the source of truth for *what* the product is.
+**MVP core implemented; first runtime proof run (2026-07-02) — pivoting to script-first.** The full non-UI data path and the editor UI are built and tested. A live probe against the real dynamic-workflow runtime confirmed per-stage `agent({ model })` routing works and that unknown model ids fail *loud* (no silent session-model fallback) — resolving the core of OpenQuestions #1/#5 (see `OpenQuestions.md`, Findings 2026-07-02). On that basis the **script emitter is now built and primary** (`src/emit/scriptEmitter.ts`), with the prompt emitter demoted to a durable fallback. The design/specification docs remain the source of truth for *what* the product is.
 
 | Layer | Where | Notes |
 |---|---|---|
 | Canonical spec model | `src/spec/` | `schema.ts` (Zod model + `z.infer` types), `validate.ts` (graph pass: dangling-ref; cycle check is a documented no-op), `seed.ts` (the `code-review-loop` example) |
 | State | `src/store/workflowStore.ts` | Zustand + Immer; the single live `WorkflowSpec`; actions for caps, agent CRUD, flat phase-list ops |
-| Prompt emitter | `src/emit/promptEmitter.ts` | deterministic single structured-Markdown artifact; golden inline-snapshot guarded |
+| Script emitter (primary) | `src/emit/scriptEmitter.ts` | deterministic runtime-valid `.js` (`meta`/`phase`/`agent({model})`/`parallel`); models executed literally = enforced; fan-out capped in-script; dangling refs `throw`; version-tagged (`RUNTIME_TAG`); golden-snapshot + run-validated |
+| Prompt emitter (fallback) | `src/emit/promptEmitter.ts` | deterministic single structured-Markdown artifact; durable across API churn but Claude authors the orchestration (model pin is a *request*); golden inline-snapshot guarded |
 | Editor UI (mockup 7) | `src/components/editor/` | three panes bound to the store; theme tokens + forced dark in `src/index.css` |
 | Shared helpers | `src/lib/` | `models.ts` (bundled Claude family + alias/family helpers), `estimate.ts` (run-size estimate) |
 
-Test suite: **39 passing** (schema, store, emitter snapshot, RTL UI). `npm run typecheck` / `lint` / `build` all clean.
+Test suite: **47 passing** (schema, store, both emitter snapshots, RTL UI). `npm run typecheck` / `lint` / `build` all clean.
 
-**Not done:** the MVP's actual proof — running the emitted artifact in Claude Code and diffing the approval screen against the spec (the thesis the whole product exists to test). See **Next steps**.
+**Proven by running (not review):** the emitted script shape executes end-to-end in the real runtime; the fan-out `toItems` handoff was caught under-splitting a plain-newline list and fixed, then re-run green. **Still open:** the *prompt-path* faithfulness (#3/#4) is untested (the proof exercised the script path); the fan-out string→items handoff is a heuristic (robust upgrade = give fan-out producers an output schema); topology editor still exposes only a flat step/fan-out list. See **Next steps**.
 
 ## Next steps
 
 Priority order. Step 1 is the real MVP gate; the rest are deferred extensions, each additive (none requires redesigning the core).
 
-1. **Run the manual verify loop (the MVP proof).** `npm run dev`, load the `code-review-loop` seed, copy the emitted artifact, paste into Claude Code (**v2.1.154+**), and **diff the approval screen** (model per stage, topology, per-stage caps) against the spec. This is what resolves `OpenQuestions.md` #3–#5 (prompt-path faithfulness, whether structured-Markdown is treated as authoritatively as JSON, alias routing). Record findings there. Ground truth is the run, **not** Claude's "looks right".
+1. **Finish the verify loop for the seed's real workload.** The runtime *mechanics* are proven (see status above); what's left is running the **full `code-review-loop`** emitted script against an actual diff to confirm the topology/model routing on the approval screen + raw script for a non-trivial run, and to resolve `OpenQuestions.md` #3/#4 for the *prompt* path (structured-Markdown faithfulness). Ground truth is the run, **not** Claude's "looks right". Refinement: give fan-out producers an output schema so the `toItems` handoff is exact rather than heuristic.
 2. **Eyeball the UI** against `mockups/07-console-editor.html` (combobox popover, layout, dangling state) — built and unit-tested but not yet visually verified in a browser.
 3. **Deploy** the static `dist/` to Cloudflare Pages.
 4. **V1.1 — generated graph view:** the deferred headline visibility artifact (React Flow / `@xyflow`), a *derived* projection of the model (always correct because derived, never drawn).

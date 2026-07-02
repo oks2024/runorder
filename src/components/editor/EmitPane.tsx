@@ -1,15 +1,30 @@
+import { useState } from 'react'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { emitPrompt } from '@/emit/promptEmitter'
+import { emitScript } from '@/emit/scriptEmitter'
 import { cn } from '@/lib/utils'
 import { useCopy } from './useCopy'
 
+type Projection = 'script' | 'prompt'
+
 /**
- * Live readout of the single structured-Markdown artifact (verbatim emitPrompt output).
- * The Script tab is deferred (V2). Copy → paste into Claude Code → approve → run.
+ * Live readout of an emitted artifact. Two projections of the same spec:
+ *   - Script (primary): runtime-valid `.js` — per-stage model routing is executed literally,
+ *     so the model pin is a real, checkable guarantee (see OpenQuestions.md, Findings 2026-07-02).
+ *   - Prompt (fallback): the durable structured-Markdown artifact — resilient to API churn,
+ *     but Claude authors the orchestration, so the model pin is a *request*, not enforcement.
+ * Copy → paste/save into Claude Code → approve → run.
  */
 export function EmitPane() {
-  const artifact = useWorkflowStore((s) => emitPrompt(s.spec))
+  const spec = useWorkflowStore((s) => s.spec)
+  const [projection, setProjection] = useState<Projection>('script')
   const [copied, copy] = useCopy()
+
+  const artifact = projection === 'script' ? emitScript(spec) : emitPrompt(spec)
+  const hint =
+    projection === 'script'
+      ? '▸ save as .claude/workflows/…js · approve · run'
+      : '▸ paste into Claude Code · approve · run'
 
   return (
     <section className="flex min-h-0 flex-col rounded-xl border border-line bg-panel shadow-[0_8px_22px_oklch(0_0_0/0.28)]">
@@ -29,26 +44,38 @@ export function EmitPane() {
         <div className="flex gap-0.5 px-3 pt-2.5" role="tablist" aria-label="Artifact projection">
           <button
             role="tab"
-            aria-selected="true"
-            className="rounded-t-md border border-line-soft border-b-well bg-well px-2.5 py-1.5 font-mono text-[11px] text-ink"
+            aria-selected={projection === 'script'}
+            onClick={() => setProjection('script')}
+            title="Runtime-valid JS. Per-stage models are executed literally — enforced, not requested."
+            className={cn(
+              'rounded-t-md border px-2.5 py-1.5 font-mono text-[11px]',
+              projection === 'script'
+                ? 'border-line-soft border-b-well bg-well text-ink'
+                : 'border-transparent text-ink-faint hover:text-ink-dim',
+            )}
           >
-            Prompt artifact
+            Script{' '}
+            <span className="ml-1 text-[8.5px] tracking-[0.1em] text-enforced">ENFORCED</span>
           </button>
           <button
             role="tab"
-            aria-selected="false"
-            disabled
-            title="Script emitter is deferred (V2). Version-tagged, validated by running fixtures."
-            className="rounded-t-md border border-transparent px-2.5 py-1.5 font-mono text-[11px] text-ink-faint opacity-60"
+            aria-selected={projection === 'prompt'}
+            onClick={() => setProjection('prompt')}
+            title="Structured-Markdown fallback. Durable across API churn, but Claude authors the orchestration — the model pin is a request, not a guarantee."
+            className={cn(
+              'rounded-t-md border px-2.5 py-1.5 font-mono text-[11px]',
+              projection === 'prompt'
+                ? 'border-line-soft border-b-well bg-well text-ink'
+                : 'border-transparent text-ink-faint hover:text-ink-dim',
+            )}
           >
-            Script <span className="ml-1 text-[8.5px] tracking-[0.1em] text-intended">DEFERRED · V2</span>
+            Prompt{' '}
+            <span className="ml-1 text-[8.5px] tracking-[0.1em] text-intended">FALLBACK</span>
           </button>
         </div>
 
         <div className="flex items-center gap-2 border-y border-line-soft bg-well px-3 py-2">
-          <span className="font-mono text-[11px] text-ink-faint">
-            ▸ paste into Claude Code · approve · run
-          </span>
+          <span className="font-mono text-[11px] text-ink-faint">{hint}</span>
           <span className="flex-1" />
           <button
             type="button"

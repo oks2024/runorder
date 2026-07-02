@@ -1,6 +1,6 @@
 import { useWorkflowStore } from '@/store/workflowStore'
 import { validateSpec } from '@/spec/validate'
-import { emitPrompt } from '@/emit/promptEmitter'
+import { emitScript } from '@/emit/scriptEmitter'
 import { cn } from '@/lib/utils'
 import { useCopy } from './useCopy'
 
@@ -59,9 +59,10 @@ export function TopBar() {
       <button
         type="button"
         className="rounded-md border border-line bg-panel2 px-3 py-1.5 font-mono text-xs text-ink hover:border-ink-faint focus-visible:outline-2 focus-visible:outline-focus"
-        onClick={() => copy(emitPrompt(spec))}
+        onClick={() => copy(emitScript(spec))}
+        title="Copy the runtime-valid workflow script (save under .claude/workflows/ to reuse as /name)."
       >
-        {copied ? '✓ Copied' : 'Emit artifact'}
+        {copied ? '✓ Copied script' : 'Emit script'}
       </button>
     </header>
   )

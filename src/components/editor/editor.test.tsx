@@ -3,19 +3,27 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import App from '@/App'
 import { useWorkflowStore } from '@/store/workflowStore'
 
-const artifact = () => screen.getByText(/Run the following as a dynamic workflow/)
+// The Emit pane defaults to the Script projection.
+const script = () => screen.getByText(/export const meta/)
+const prompt = () => screen.getByText(/Run the following as a dynamic workflow/)
 
 beforeEach(() => {
   useWorkflowStore.getState().load() // fresh seed before each render
 })
 
 describe('Editor UI — store-bound behavior', () => {
-  it('renders the seed: roster, phases, and the live artifact', () => {
+  it('renders the seed: roster, phases, and the live script artifact', () => {
     render(<App />)
     expect(screen.getByText('3 defined')).toBeInTheDocument()
     expect(screen.getAllByLabelText('Agent name')).toHaveLength(3)
-    expect(artifact().textContent).toContain('# Workflow: code-review-loop')
-    expect(artifact().textContent).toContain('2. fan-out — investigator over phase 1 output')
+    expect(script().textContent).toContain('name: "code-review-loop"')
+    expect(script().textContent).toContain('fan-out — investigator → claude-sonnet-4-6 (dynamic-N, cap 8)')
+  })
+
+  it('switches to the Prompt (fallback) projection on tab click', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: /Prompt/ }))
+    expect(prompt().textContent).toContain('# Workflow: code-review-loop')
   })
 
   it('add-agent grows the roster', () => {
@@ -35,13 +43,14 @@ describe('Editor UI — store-bound behavior', () => {
   it('renaming an agent flows live into the emitted artifact', () => {
     render(<App />)
     fireEvent.change(screen.getAllByLabelText('Agent name')[0], { target: { value: 'auditor' } })
-    expect(artifact().textContent).toContain('- auditor → claude-opus-4-8')
+    expect(script().textContent).toContain('step — auditor → claude-opus-4-8')
+    expect(script().textContent).toContain('label: "auditor"')
   })
 
   it('+ Fan-out appends a phase reflected in the artifact', () => {
     render(<App />)
     fireEvent.click(screen.getByText('+ Fan-out'))
-    expect(artifact().textContent).toContain('4. fan-out')
+    expect(script().textContent).toContain('{ title: "Phase 4"')
   })
 
   it('deleting a referenced agent flips the validation pill to an issue', () => {
