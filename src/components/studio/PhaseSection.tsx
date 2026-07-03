@@ -65,8 +65,11 @@ export function PhaseSection({
   const phue = hueVar(primary?.model ?? INHERIT)
   const kind = KIND_LABEL[patternKeyOf(node)]
 
+  const nodeId = 'id' in node ? node.id : undefined
+
   return (
     <section
+      id={nodeId ? `phase-${nodeId}` : undefined}
       className="group mt-5 grid grid-cols-[44px_1fr] gap-x-[18px] rounded-[10px]"
       style={{ '--phue': phue } as CSSProperties}
     >

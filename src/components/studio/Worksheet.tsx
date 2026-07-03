@@ -58,7 +58,7 @@ export function Worksheet() {
 
         <p className="mt-14 max-w-[52ch] border-t border-rule pt-3.5 text-[12.5px] text-ink-faint">
           This worksheet is the spec; the script beside it is the receipt — the exact code that
-          will run. Rehearsal, a read-only dry-run of this page, is coming soon.
+          will run. Switch to Rehearsal for a read-only dry-run of this page.
         </p>
       </main>
     </div>

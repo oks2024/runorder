@@ -24,6 +24,7 @@ export function TopBar() {
 
   const result = validateSpec(spec)
   const issueCount = result.ok ? 0 : result.issues.length
+  const rehearsing = view === 'rehearsal'
 
   const copyActive = () => {
     const useScript = !showScript || receiptTab === 'script'
@@ -32,8 +33,11 @@ export function TopBar() {
 
   return (
     <div className="flex items-center gap-4 border-b-2 border-ink bg-paper px-6 py-3">
-      <span className="font-mono text-[10px] tracking-[0.18em] text-ink-faint uppercase">
-        Worksheet
+      <span
+        data-testid="doc-label"
+        className="font-mono text-[10px] tracking-[0.18em] text-ink-faint uppercase"
+      >
+        {rehearsing ? 'Rehearsal' : 'Worksheet'}
       </span>
       <span className="font-mono text-[15px] font-semibold text-ink">{spec.name}</span>
       <div className="flex-1" />
@@ -41,21 +45,23 @@ export function TopBar() {
       <div className="inline-flex overflow-hidden rounded-lg border border-rule bg-paper-2" role="tablist" aria-label="View">
         <button
           role="tab"
-          aria-selected={view === 'worksheet'}
+          aria-selected={!rehearsing}
           onClick={() => setView('worksheet')}
           className={cn(
             'px-4 py-1.5 font-mono text-[11.5px]',
-            view === 'worksheet' ? 'bg-ink font-medium text-paper' : 'text-ink-faint hover:text-ink',
+            !rehearsing ? 'bg-ink font-medium text-paper' : 'text-ink-faint hover:text-ink',
           )}
         >
           Worksheet
         </button>
         <button
           role="tab"
-          aria-selected={false}
-          disabled
-          title="rehearsal — coming soon"
-          className="cursor-not-allowed px-4 py-1.5 font-mono text-[11.5px] text-ink-faint opacity-50"
+          aria-selected={rehearsing}
+          onClick={() => setView('rehearsal')}
+          className={cn(
+            'px-4 py-1.5 font-mono text-[11.5px]',
+            rehearsing ? 'bg-ink font-medium text-paper' : 'text-ink-faint hover:text-ink',
+          )}
         >
           Rehearsal
         </button>
@@ -65,9 +71,11 @@ export function TopBar() {
         type="button"
         onClick={() => setShowScript(!showScript)}
         aria-pressed={showScript}
+        disabled={rehearsing}
         className={cn(
           'inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px]',
           showScript ? 'border-ink-dim text-ink' : 'border-rule text-ink-dim',
+          rehearsing && 'pointer-events-none opacity-40',
         )}
       >
         <span
