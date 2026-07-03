@@ -18,9 +18,9 @@ export function TopBar() {
     <header className="flex items-center gap-4 border-b border-line bg-gradient-to-b from-panel to-panel2 px-[18px] py-2.5">
       <div className="flex items-baseline gap-2.5">
         <span className="size-[9px] self-center rounded-full bg-enforced shadow-[0_0_8px_var(--color-enforced)]" />
-        <span className="font-mono font-semibold tracking-[0.02em]">DWE</span>
+        <span className="font-mono font-semibold tracking-[0.02em]">Prewire</span>
         <span className="font-mono text-[11px] tracking-[0.12em] text-ink-faint uppercase">
-          Dynamic&nbsp;Workflow&nbsp;Editor
+          Dynamic&nbsp;workflow&nbsp;editor
         </span>
       </div>
 
