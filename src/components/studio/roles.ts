@@ -7,6 +7,7 @@
  * store needs the same extraction. Kept UI-local for M1.
  */
 import type { PatternKey } from '@/lib/patterns'
+import { primaryRef as primaryRefOrNull } from '@/lib/nodeRoles'
 import type { PatternNode } from '@/spec/schema'
 
 /** Any composition node the worksheet renders (everything except a nested sequence). */
@@ -41,16 +42,7 @@ export const KIND_LABEL: Record<PatternKey, string> = {
   delegate: 'delegate',
 }
 
-/** The primary agent ref of a phase (the one that leads the sentence), or '' if id-less. */
+/** The primary agent ref of a phase (the one that leads the sentence), or '' if unresolvable. */
 export function primaryRef(node: EditableNode): string {
-  switch (node.type) {
-    case 'iterateUntil':
-      return node.body.type === 'agent' ? node.body.agent : ''
-    case 'mapReduce':
-      return node.map.agent
-    case 'adversarial':
-      return node.producer
-    default:
-      return node.agent // agent | fanout | multiAngle
-  }
+  return primaryRefOrNull(node) ?? ''
 }

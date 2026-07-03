@@ -1,9 +1,22 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, within, fireEvent, waitFor, act } from '@testing-library/react'
 import App from '@/App'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { useUiStore } from '@/store/uiStore'
 import { estimateRunSize } from '@/lib/estimate'
+import { PATTERN_INFO, PATTERN_NAME, PATTERN_ORDER, PATTERN_DND_MIME } from '@/lib/patterns'
+
+/** A minimal stubbed `DataTransfer` for jsdom, which has no native drag-and-drop. */
+function stubDataTransfer(kind?: string) {
+  const store = new Map<string, string>()
+  if (kind) store.set(PATTERN_DND_MIME, kind)
+  return {
+    setData: (t: string, v: string) => store.set(t, v),
+    getData: (t: string) => store.get(t) ?? '',
+    dropEffect: 'none',
+    effectAllowed: 'uninitialized',
+  }
+}
 
 // The receipt column defaults to the Script projection; its <pre> is one big text node.
 const script = () => screen.getByText(/export const meta/)
@@ -29,9 +42,11 @@ describe('Studio worksheet — store-bound behavior', () => {
     render(<App />)
     expect(screen.getByDisplayValue('code-review-loop')).toBeInTheDocument()
 
-    // kind labels in the pnum gutter
-    expect(screen.getAllByText('step')).toHaveLength(2)
-    expect(screen.getByText('fan-out')).toBeInTheDocument()
+    // kind labels in the pnum gutter (scoped to the worksheet — the shelf also has cards
+    // named "step"/"fan-out")
+    const main = within(screen.getByRole('main'))
+    expect(main.getAllByText('step')).toHaveLength(2)
+    expect(main.getByText('fan-out')).toBeInTheDocument()
 
     // agent-name tokens
     expect(screen.getByDisplayValue('reviewer')).toBeInTheDocument()
@@ -122,5 +137,122 @@ describe('Studio worksheet — store-bound behavior', () => {
       target: { value: 'AUDIT THE DIFF THOROUGHLY' },
     })
     expect(script().textContent).toContain('AUDIT THE DIFF THOROUGHLY')
+  })
+})
+
+describe('Studio pattern shelf — drag-to-insert', () => {
+  it('renders all seven pattern cards with names, use-lines, and run-proven marks', () => {
+    render(<App />)
+    const shelf = screen.getByLabelText('Pattern playbook')
+    for (const kind of PATTERN_ORDER) {
+      expect(within(shelf).getByText(PATTERN_NAME[kind])).toBeInTheDocument()
+      expect(within(shelf).getByText(PATTERN_INFO[kind].use)).toBeInTheDocument()
+    }
+    expect(within(shelf).getAllByText('run-proven')).toHaveLength(7)
+  })
+
+  it('clicking a pattern card appends a fresh phase (keyboard/touch fallback)', () => {
+    render(<App />)
+    expect(useWorkflowStore.getState().spec.agents).toHaveLength(3)
+
+    fireEvent.click(screen.getByRole('button', { name: /^fan-out/i }))
+
+    const root = useWorkflowStore.getState().spec.root
+    expect(root.type).toBe('sequence')
+    if (root.type === 'sequence') {
+      expect(root.steps).toHaveLength(4)
+      expect(root.steps[3].type).toBe('fanout')
+    }
+    // fresh agent minted for the fan-out's role, named after ROLE_NAMES.fanout = ['worker']
+    expect(screen.getByDisplayValue('worker')).toBeInTheDocument()
+  })
+
+  it('dragging a card from the shelf lights every seam and drop-end; dragend clears them', () => {
+    render(<App />)
+    const card = screen.getByRole('button', { name: /^step/i })
+    const dataTransfer = stubDataTransfer()
+
+    fireEvent.dragStart(card, { dataTransfer })
+    expect(useUiStore.getState().draggingPattern).toBe('step')
+    expect(screen.getByTestId('seam-0')).toHaveAttribute('data-hot', 'true')
+    expect(screen.getByTestId('seam-1')).toHaveAttribute('data-hot', 'true')
+    expect(screen.getByTestId('drop-end')).toHaveAttribute('data-hot', 'true')
+
+    fireEvent.dragEnd(card, { dataTransfer })
+    expect(useUiStore.getState().draggingPattern).toBeNull()
+    expect(screen.getByTestId('seam-0')).toHaveAttribute('data-hot', 'false')
+    expect(screen.getByTestId('drop-end')).toHaveAttribute('data-hot', 'false')
+  })
+
+  it('dropping on the seam at index 1 inserts there (position 2 of 4)', () => {
+    render(<App />)
+    const card = screen.getByRole('button', { name: /^loop/i })
+    const dataTransfer = stubDataTransfer()
+
+    fireEvent.dragStart(card, { dataTransfer })
+    const seam1 = screen.getByTestId('seam-1')
+    fireEvent.dragOver(seam1, { dataTransfer })
+    fireEvent.drop(seam1, { dataTransfer })
+
+    const root = useWorkflowStore.getState().spec.root
+    expect(root.type).toBe('sequence')
+    if (root.type === 'sequence') {
+      expect(root.steps).toHaveLength(4)
+      expect(root.steps[1].type).toBe('iterateUntil')
+    }
+    // scoped to the worksheet — the shelf also has a card named "loop"
+    expect(within(screen.getByRole('main')).getAllByText('loop')).toHaveLength(1)
+    expect(useUiStore.getState().draggingPattern).toBeNull()
+  })
+
+  it('a duplicate drop event on the same seam only inserts once', () => {
+    render(<App />)
+    const card = screen.getByRole('button', { name: /^step/i })
+    const dataTransfer = stubDataTransfer()
+
+    fireEvent.dragStart(card, { dataTransfer })
+    const seam1 = screen.getByTestId('seam-1')
+    fireEvent.drop(seam1, { dataTransfer })
+    fireEvent.drop(seam1, { dataTransfer }) // duplicate — must be a no-op
+
+    const root = useWorkflowStore.getState().spec.root
+    expect(root.type).toBe('sequence')
+    if (root.type === 'sequence') expect(root.steps).toHaveLength(4)
+  })
+
+  it('dropping on the drop-end appends at the end', () => {
+    render(<App />)
+    const card = screen.getByRole('button', { name: /^multi-angle/i })
+    const dataTransfer = stubDataTransfer()
+
+    fireEvent.dragStart(card, { dataTransfer })
+    const dropEnd = screen.getByTestId('drop-end')
+    fireEvent.dragOver(dropEnd, { dataTransfer })
+    fireEvent.drop(dropEnd, { dataTransfer })
+
+    const root = useWorkflowStore.getState().spec.root
+    expect(root.type).toBe('sequence')
+    if (root.type === 'sequence') {
+      expect(root.steps).toHaveLength(4)
+      expect(root.steps[3].type).toBe('multiAngle')
+    }
+  })
+})
+
+describe('Studio agent token — retarget dropdown', () => {
+  it('retargeting a role via the ▾ picker reassigns it and GCs the orphaned agent', () => {
+    render(<App />)
+    expect(useWorkflowStore.getState().spec.agents).toHaveLength(3)
+    expect(screen.getByDisplayValue('synthesizer')).toBeInTheDocument()
+
+    const picker = screen.getByLabelText('Retarget synthesizer to another agent')
+    fireEvent.change(picker, { target: { value: 'reviewer' } })
+
+    // phase 3's sentence now shows "reviewer" (shared with phase 1's token)
+    expect(screen.getAllByDisplayValue('reviewer')).toHaveLength(2)
+    expect(screen.queryByDisplayValue('synthesizer')).not.toBeInTheDocument()
+
+    // the orphaned "synthesizer" agent is unreferenced anywhere now — GC'd from the roster
+    expect(useWorkflowStore.getState().spec.agents).toHaveLength(2)
   })
 })

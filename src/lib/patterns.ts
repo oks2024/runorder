@@ -28,6 +28,31 @@ export interface PatternInfo {
   use: string
 }
 
+/** Shelf card order (mirrors the mockup's playbook order top-to-bottom). */
+export const PATTERN_ORDER: PatternKey[] = [
+  'step',
+  'fanout',
+  'loop',
+  'mapReduce',
+  'adversarial',
+  'multiAngle',
+  'delegate',
+]
+
+/** Shelf display name (mockup `.pat .nm`) — distinct from the terser `.pnum` kind label. */
+export const PATTERN_NAME: Record<PatternKey, string> = {
+  step: 'step',
+  fanout: 'fan-out',
+  loop: 'loop',
+  mapReduce: 'map-reduce',
+  adversarial: 'adversarial',
+  multiAngle: 'multi-angle',
+  delegate: 'A+ delegation',
+}
+
+/** `dataTransfer` MIME type carrying the dragged pattern kind from the shelf to a drop zone. */
+export const PATTERN_DND_MIME = 'application/x-prewire-pattern'
+
 export const PATTERN_INFO: Record<PatternKey, PatternInfo> = {
   step: {
     badge: '● Step',

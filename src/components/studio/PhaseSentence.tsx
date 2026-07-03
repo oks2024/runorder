@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { deriveMemoryNames } from '@/lib/memoryNames'
 import { isSchemaForced } from '@/emit/plumbing'
+import { referencedAgentIds } from '@/lib/nodeRoles'
 import { INHERIT } from '@/lib/models'
 import type { Agent, PatternNode } from '@/spec/schema'
 import { AgentToken } from './AgentToken'
@@ -29,6 +30,8 @@ export function PhaseSentence({
 }) {
   const spec = useWorkflowStore((s) => s.spec)
   const updateAgent = useWorkflowStore((s) => s.updateAgent)
+  const setPhaseAgent = useWorkflowStore((s) => s.setPhaseAgent)
+  const setPhaseSecondaryAgent = useWorkflowStore((s) => s.setPhaseSecondaryAgent)
   const setFanoutCap = useWorkflowStore((s) => s.setFanoutCap)
   const setLoopMaxIter = useWorkflowStore((s) => s.setLoopMaxIter)
   const setMapCap = useWorkflowStore((s) => s.setMapCap)
@@ -37,8 +40,30 @@ export function PhaseSentence({
 
   const agentOf = (ref: string): Agent | undefined => spec.agents.find((a) => a.id === ref)
 
-  /** Agent-name token for a ref (danger token if dangling). */
-  const A = (ref: string) => <AgentToken agent={agentOf(ref)} danglingRef={ref} />
+  // Every agent referenced anywhere in the workflow, for the token's "▾ retarget" dropdown —
+  // it offers the *other* referenced agents, never the roster's unreferenced ghosts.
+  const referencedIds = referencedAgentIds(spec)
+  const referencedAgents = spec.agents.filter((a) => referencedIds.has(a.id))
+
+  /**
+   * Agent-name token for a ref (danger token if dangling). `role` says which store setter a
+   * retarget through this token should call — the phase's primary role (step/fan-out agent,
+   * loop body, map/producer/taker/lead) or its secondary role (reduce/critic/vote/grant).
+   */
+  const A = (ref: string, role: 'primary' | 'secondary' = 'primary') => {
+    const agent = agentOf(ref)
+    const otherAgents = agent ? referencedAgents.filter((a) => a.id !== agent.id) : undefined
+    const onRetarget = (id: string) =>
+      role === 'primary' ? setPhaseAgent(index, id) : setPhaseSecondaryAgent(index, id)
+    return (
+      <AgentToken
+        agent={agent}
+        danglingRef={ref}
+        otherAgents={otherAgents}
+        onRetarget={onRetarget}
+      />
+    )
+  }
 
   /** Model pill for a ref + its enforced mark (only when a model is pinned). */
   const M = (ref: string): ReactNode => {
@@ -85,7 +110,7 @@ export function PhaseSentence({
               label="delegation cap"
               onCommit={(n) => setGrantCap(index, n)}
             />
-            <EnfMark /> sub-tasks to {A(grant.agent)} instances on {M(grant.agent)}
+            <EnfMark /> sub-tasks to {A(grant.agent, 'secondary')} instances on {M(grant.agent)}
           </p>
         )
       }
@@ -144,15 +169,15 @@ export function PhaseSentence({
             label="map cap"
             onCommit={(n) => setMapCap(index, n)}
           />
-          <EnfMark /> in parallel, on {M(node.map.agent)}; then {A(node.reduce)} merges every
-          output into one result on {M(node.reduce)}
+          <EnfMark /> in parallel, on {M(node.map.agent)}; then {A(node.reduce, 'secondary')} merges
+          every output into one result on {M(node.reduce)}
         </p>
       )
     case 'adversarial':
       return (
         <p className={pline}>
-          {A(node.producer)} drafts on {M(node.producer)}; then {A(node.critic)} attacks the
-          draft on {M(node.critic)}
+          {A(node.producer)} drafts on {M(node.producer)}; then {A(node.critic, 'secondary')}
+          attacks the draft on {M(node.critic)}
         </p>
       )
     case 'multiAngle':
@@ -166,8 +191,8 @@ export function PhaseSentence({
             label="angles"
             onCommit={(n) => setAngles(index, n)}
           />
-          <EnfMark /> independent takes in parallel on {M(node.agent)}; then {A(node.vote)} picks
-          or synthesizes the best on {M(node.vote)}
+          <EnfMark /> independent takes in parallel on {M(node.agent)}; then{' '}
+          {A(node.vote, 'secondary')} picks or synthesizes the best on {M(node.vote)}
         </p>
       )
   }

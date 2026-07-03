@@ -16,6 +16,9 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { INHERIT } from '@/lib/models'
+import { referencedAgentIds } from '@/lib/nodeRoles'
+import { schemaForcible } from '@/emit/plumbing'
+import type { PatternKey } from '@/lib/patterns'
 import { codeReviewLoop } from '@/spec/seed'
 import type { Agent, PatternNode, WorkflowSpec } from '@/spec/schema'
 
@@ -26,6 +29,32 @@ const LOOP_ITER_MAX = 20
 const LOOP_ITER_DEFAULT = 3
 const ANGLES_MAX = 8
 const ANGLES_DEFAULT = 3
+
+/**
+ * Fresh-agent role names per pattern — dropping a pattern into the worksheet mints one new
+ * agent per role (no reuse of `spec.agents[0]`), so every phase is authored in isolation.
+ * Names are deduped against the existing roster with `-2`, `-3`, … suffixes.
+ */
+const ROLE_NAMES: Record<PatternKey, string[]> = {
+  step: ['agent'],
+  fanout: ['worker'],
+  loop: ['refiner'],
+  mapReduce: ['mapper', 'reducer'],
+  adversarial: ['producer', 'critic'],
+  multiAngle: ['taker', 'voter'],
+  delegate: ['lead', 'helper'],
+}
+
+/** Item-fed patterns consume the previous phase's output as their item list (see defaultReadsAt). */
+const ITEM_FED: Record<PatternKey, boolean> = {
+  step: false,
+  fanout: true,
+  loop: false,
+  mapReduce: true,
+  adversarial: false,
+  multiAngle: false,
+  delegate: false,
+}
 
 /** Editable subset of an agent (id is opaque/immutable; never patched). */
 export type AgentPatch = Partial<Pick<Agent, 'name' | 'model' | 'prompt'>>
@@ -45,18 +74,13 @@ export interface WorkflowState {
   updateAgent: (id: string, patch: AgentPatch) => void
 
   // --- composition (flat phase list over root.steps) ---
-  addStep: (agentId?: string) => void
-  addFanout: (agentId?: string, cap?: number) => void
-  /** Append a loop: one body agent repeated up to `maxIter` (stops early when it reports done). */
-  addLoop: (agentId?: string, maxIter?: number) => void
-  /** Append a map-reduce: map one agent over prior output (capped), then a reduce agent merges. */
-  addMapReduce: (mapAgentId?: string, reduceAgentId?: string, cap?: number) => void
-  /** Append an adversarial pair: producer drafts, critic critiques. */
-  addAdversarial: (producerId?: string, criticId?: string) => void
-  /** Append a multi-angle: one agent from N angles, then a vote agent picks/synthesizes. */
-  addMultiAngle: (agentId?: string, voteId?: string, angles?: number) => void
-  /** Append an A+ delegate step: a lead agent empowered to delegate to a capped agent. */
-  addDelegate: (agentId?: string, grantAgentId?: string, cap?: number) => void
+  /**
+   * Insert a fresh phase of `kind` at `index` (clamped to `[0, steps.length]`), minting new
+   * agents for its roles (deduped names, inherit model, empty prompt) and default `reads`
+   * computed from the phase that will precede it. Returns the new node's id (or '' if root is
+   * not a sequence). Replaces the seven append-only `add*` actions.
+   */
+  insertPattern: (kind: PatternKey, index: number) => string
   removePhase: (index: number) => void
   /** Reorder by swapping with the neighbor in `dir` (-1 up, +1 down); bounds-checked. */
   movePhase: (index: number, dir: -1 | 1) => void
@@ -85,29 +109,108 @@ function newId(): string {
 }
 
 /**
- * Default `reads` for a phase appended after `steps`.
+ * Default `reads` for a phase inserted at `index` — computed from `steps[index - 1]`, the
+ * phase that will immediately precede it.
  *
  * Sequential-input kinds read the previous phase (matches the pre-reads behavior, never
  * worse). Item-fed kinds (fan-out / map-reduce) already receive the previous phase through
  * their *items*; they pre-read it only when the previous phase will be schema-forced to
  * `{ context, items }` — then the read splices the cheap shared `context`, not a duplicate
  * of the item list. Reading an array-yielding previous phase would send every worker all
- * of its siblings' inputs, so those default to no reads.
+ * of its siblings' inputs, so those default to no reads. Inserting at index 0 (nothing
+ * precedes) yields no reads.
  */
-function defaultReads(steps: PatternNode[], itemFed: boolean): string[] {
-  const prev = steps[steps.length - 1]
+function defaultReadsAt(steps: PatternNode[], index: number, itemFed: boolean): string[] {
+  const prev = steps[index - 1]
   if (!prev || prev.type === 'sequence' || !prev.id) return []
   if (!itemFed) return [prev.id]
-  const schemaForcible =
-    (prev.type === 'agent' && !(prev.grants && prev.grants.length > 0)) ||
-    prev.type === 'mapReduce' ||
-    prev.type === 'multiAngle'
-  return schemaForcible ? [prev.id] : []
+  return schemaForcible(prev) ? [prev.id] : []
 }
 
 function clampInt(n: number, min: number, max: number): number | undefined {
   if (!Number.isFinite(n)) return undefined
   return Math.max(min, Math.min(max, Math.round(n)))
+}
+
+/** Pick a roster-unique name: `base`, else `base-2`, `base-3`, … */
+function dedupeName(base: string, agents: Agent[]): string {
+  const taken = new Set(agents.map((a) => a.name))
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(`${base}-${n}`)) n++
+  return `${base}-${n}`
+}
+
+/**
+ * Build a fresh pattern node from its kind, the ids of its (already-minted) role agents, the
+ * concurrency cap (for fan-out/map/grant caps), its default reads, and its node id. Mirrors
+ * the numeric defaults the old `add*` factories used.
+ */
+function buildPatternNode(
+  kind: PatternKey,
+  agentIds: string[],
+  concurrency: number,
+  reads: string[],
+  id: string,
+): PatternNode {
+  const cap = clampInt(concurrency, 1, FANOUT_CAP_MAX) ?? 1
+  switch (kind) {
+    case 'step':
+      return { type: 'agent', agent: agentIds[0], id, reads }
+    case 'fanout':
+      return { type: 'fanout', agent: agentIds[0], cap, id, reads }
+    case 'loop':
+      return {
+        type: 'iterateUntil',
+        body: { type: 'agent', agent: agentIds[0] },
+        maxIter: LOOP_ITER_DEFAULT,
+        id,
+        reads,
+      }
+    case 'mapReduce':
+      return {
+        type: 'mapReduce',
+        map: { agent: agentIds[0], cap },
+        reduce: agentIds[1],
+        id,
+        reads,
+      }
+    case 'adversarial':
+      return { type: 'adversarial', producer: agentIds[0], critic: agentIds[1], id, reads }
+    case 'multiAngle':
+      return {
+        type: 'multiAngle',
+        agent: agentIds[0],
+        angles: ANGLES_DEFAULT,
+        vote: agentIds[1],
+        id,
+        reads,
+      }
+    case 'delegate':
+      return {
+        type: 'agent',
+        agent: agentIds[0],
+        grants: [{ agent: agentIds[1], cap }],
+        id,
+        reads,
+      }
+  }
+}
+
+/**
+ * Drop `spec.agents` entries no phase references anywhere in the tree.
+ *
+ * Rationale: the Studio has no roster pane — agents enter *only* via `insertPattern` (one
+ * fresh agent per role). An agent no phase points at is therefore invisible and unreachable
+ * forever; shipping such ghost entries would violate "the worksheet is the spec". So GC runs
+ * wherever a reference can be dropped: `removePhase` and the two role setters. (It does NOT
+ * run in `addAgent`/`removeAgent`/`updateAgent` — `addAgent` mints an as-yet-unreferenced
+ * agent and would be instantly self-defeating; those actions remain for tests/API parity.)
+ * GC considers ALL refs, including delegation grants and loop bodies (via referencedAgentIds).
+ */
+function gcUnreferencedAgents(spec: WorkflowSpec): void {
+  const referenced = referencedAgentIds(spec)
+  spec.agents = spec.agents.filter((a) => referenced.has(a.id))
 }
 
 function clone(spec: WorkflowSpec): WorkflowSpec {
@@ -163,105 +266,30 @@ export const useWorkflowStore = create<WorkflowState>()(
         if (patch.prompt !== undefined) agent.prompt = patch.prompt
       }),
 
-    addStep: (agentId) =>
+    insertPattern: (kind, index) => {
+      const nodeId = newId()
+      let ok = false
       set((s) => {
         if (s.spec.root.type !== 'sequence') return
-        s.spec.root.steps.push({
-          type: 'agent',
-          agent: agentId ?? s.spec.agents[0]?.id ?? '',
-          id: newId(),
-          reads: defaultReads(s.spec.root.steps, false),
+        const steps = s.spec.root.steps
+        const at = Math.max(0, Math.min(index, steps.length))
+        // Mint one fresh agent per role, deduping each name against the (growing) roster.
+        const agentIds = ROLE_NAMES[kind].map((base) => {
+          const id = newId()
+          s.spec.agents.push({
+            id,
+            name: dedupeName(base, s.spec.agents),
+            model: INHERIT,
+            prompt: '',
+          })
+          return id
         })
-      }),
-
-    addFanout: (agentId, cap) =>
-      set((s) => {
-        if (s.spec.root.type !== 'sequence') return
-        s.spec.root.steps.push({
-          type: 'fanout',
-          agent: agentId ?? s.spec.agents[0]?.id ?? '',
-          cap: clampInt(cap ?? s.spec.caps.concurrency, 1, FANOUT_CAP_MAX) ?? 1,
-          id: newId(),
-          reads: defaultReads(s.spec.root.steps, true),
-        })
-      }),
-
-    addLoop: (agentId, maxIter) =>
-      set((s) => {
-        if (s.spec.root.type !== 'sequence') return
-        s.spec.root.steps.push({
-          type: 'iterateUntil',
-          body: { type: 'agent', agent: agentId ?? s.spec.agents[0]?.id ?? '' },
-          maxIter: clampInt(maxIter ?? LOOP_ITER_DEFAULT, 1, LOOP_ITER_MAX) ?? 1,
-          id: newId(),
-          reads: defaultReads(s.spec.root.steps, false),
-        })
-      }),
-
-    addMapReduce: (mapAgentId, reduceAgentId, cap) =>
-      set((s) => {
-        if (s.spec.root.type !== 'sequence') return
-        const first = s.spec.agents[0]?.id ?? ''
-        const second = s.spec.agents[1]?.id ?? first
-        s.spec.root.steps.push({
-          type: 'mapReduce',
-          map: {
-            agent: mapAgentId ?? first,
-            cap: clampInt(cap ?? s.spec.caps.concurrency, 1, FANOUT_CAP_MAX) ?? 1,
-          },
-          reduce: reduceAgentId ?? second,
-          id: newId(),
-          reads: defaultReads(s.spec.root.steps, true),
-        })
-      }),
-
-    addAdversarial: (producerId, criticId) =>
-      set((s) => {
-        if (s.spec.root.type !== 'sequence') return
-        const first = s.spec.agents[0]?.id ?? ''
-        const second = s.spec.agents[1]?.id ?? first
-        s.spec.root.steps.push({
-          type: 'adversarial',
-          producer: producerId ?? first,
-          critic: criticId ?? second,
-          id: newId(),
-          reads: defaultReads(s.spec.root.steps, false),
-        })
-      }),
-
-    addMultiAngle: (agentId, voteId, angles) =>
-      set((s) => {
-        if (s.spec.root.type !== 'sequence') return
-        const first = s.spec.agents[0]?.id ?? ''
-        const second = s.spec.agents[1]?.id ?? first
-        s.spec.root.steps.push({
-          type: 'multiAngle',
-          agent: agentId ?? first,
-          angles: clampInt(angles ?? ANGLES_DEFAULT, 1, ANGLES_MAX) ?? 1,
-          vote: voteId ?? second,
-          id: newId(),
-          reads: defaultReads(s.spec.root.steps, false),
-        })
-      }),
-
-    addDelegate: (agentId, grantAgentId, cap) =>
-      set((s) => {
-        if (s.spec.root.type !== 'sequence') return
-        const first = s.spec.agents[0]?.id ?? ''
-        const second = s.spec.agents[1]?.id ?? first
-        s.spec.root.steps.push({
-          type: 'agent',
-          agent: agentId ?? first,
-          grants: [
-            {
-              agent: grantAgentId ?? second,
-              cap: clampInt(cap ?? s.spec.caps.concurrency, 1, FANOUT_CAP_MAX) ?? 1,
-            },
-          ],
-          id: newId(),
-          reads: defaultReads(s.spec.root.steps, false),
-        })
-      }),
+        const reads = defaultReadsAt(steps, at, ITEM_FED[kind])
+        steps.splice(at, 0, buildPatternNode(kind, agentIds, s.spec.caps.concurrency, reads, nodeId))
+        ok = true
+      })
+      return ok ? nodeId : ''
+    },
 
     setReads: (index, reads) =>
       set((s) => {
@@ -278,6 +306,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         if (s.spec.root.type !== 'sequence') return
         if (index < 0 || index >= s.spec.root.steps.length) return
         s.spec.root.steps.splice(index, 1)
+        gcUnreferencedAgents(s.spec)
       }),
 
     movePhase: (index, dir) =>
@@ -300,6 +329,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         else if (node.type === 'iterateUntil' && node.body.type === 'agent') node.body.agent = agentId
         else if (node.type === 'mapReduce') node.map.agent = agentId
         else if (node.type === 'adversarial') node.producer = agentId
+        gcUnreferencedAgents(s.spec)
       }),
 
     setPhaseSecondaryAgent: (index, agentId) =>
@@ -311,6 +341,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         else if (node.type === 'adversarial') node.critic = agentId
         else if (node.type === 'multiAngle') node.vote = agentId
         else if (node.type === 'agent' && node.grants?.[0]) node.grants[0].agent = agentId
+        gcUnreferencedAgents(s.spec)
       }),
 
     setFanoutCap: (index, cap) =>
