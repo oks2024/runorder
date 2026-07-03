@@ -92,9 +92,18 @@ export function PhaseSection({
 
       <div className="min-w-0 rounded-lg px-2 pt-[2px] pb-1.5">
         <PhaseSentence node={node} index={index} phases={phases} />
-        {promptRoles(node).map(({ ref, role }) => {
+        {promptRoles(node).map(({ ref, role }, i) => {
           const agent = agentOf(ref)
-          return agent ? <PromptBlock key={`${ref}-${role ?? 'p'}`} agent={agent} role={role} /> : null
+          const field: 'prompt' | 'prompt2' = i === 0 ? 'prompt' : 'prompt2'
+          return agent ? (
+            <PromptBlock
+              key={`${ref}-${role ?? 'p'}`}
+              agent={agent}
+              role={role}
+              nodeId={nodeId}
+              field={field}
+            />
+          ) : null
         })}
         <FlowNote node={node} index={index} count={count} />
       </div>

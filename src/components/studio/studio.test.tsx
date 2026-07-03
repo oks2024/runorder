@@ -18,8 +18,10 @@ function stubDataTransfer(kind?: string) {
   }
 }
 
-// The receipt column defaults to the Script projection; its <pre> is one big text node.
-const script = () => screen.getByText(/export const meta/)
+// The receipt column defaults to the Script projection, now rendered as one row per emitted
+// line (M4 provenance) rather than one big `<pre>` text node — `.textContent` still
+// aggregates every row's text, so substring assertions below are unaffected.
+const script = () => screen.getByTestId('script-body')
 
 const writeText = vi.fn().mockResolvedValue(undefined)
 

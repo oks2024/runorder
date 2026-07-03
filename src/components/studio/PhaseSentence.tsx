@@ -4,11 +4,13 @@ import { deriveMemoryNames } from '@/lib/memoryNames'
 import { isSchemaForced } from '@/emit/plumbing'
 import { referencedAgentIds } from '@/lib/nodeRoles'
 import { INHERIT } from '@/lib/models'
+import { provKey, type ProvField } from '@/lib/prov'
 import type { Agent, PatternNode } from '@/spec/schema'
 import { AgentToken } from './AgentToken'
 import { ModelToken } from './ModelToken'
 import { NumToken } from './NumToken'
 import { EnfMark } from './EnfMark'
+import { ProvSpan } from './ProvSpan'
 import type { EditableNode } from './roles'
 
 const mem = 'rounded-[4px] border border-rule-soft bg-paper-2 px-1.5 font-mono text-[13px] font-medium text-ink-dim'
@@ -17,7 +19,9 @@ const mem = 'rounded-[4px] border border-rule-soft bg-paper-2 px-1.5 font-mono t
  * The per-phase prose sentence with edit-in-place tokens (mockup `.pline`). One template per
  * pattern; every model/agent/number is a live token bound to the store. The enforced mark
  * appears only where the script enforces the claim: next to a pinned model, and next to the
- * literal cap/iters/angles/grant-cap numbers (guardrail #5).
+ * literal cap/iters/angles/grant-cap numbers (guardrail #5). Each of those tokens is also
+ * wrapped in a `ProvSpan` keyed to the exact field the emitter tagged on its line(s) — the
+ * two-way hover between this sentence and the receipt column.
  */
 export function PhaseSentence({
   node,
@@ -37,6 +41,11 @@ export function PhaseSentence({
   const setMapCap = useWorkflowStore((s) => s.setMapCap)
   const setAngles = useWorkflowStore((s) => s.setAngles)
   const setGrantCap = useWorkflowStore((s) => s.setGrantCap)
+
+  const nodeId = 'id' in node ? node.id : undefined
+  /** This phase's provenance key for `field`, or undefined for an id-less node — never tag a
+   *  field the emitter itself couldn't tag (guardrail #5). */
+  const key = (field: ProvField) => (nodeId ? provKey(nodeId, field) : undefined)
 
   const agentOf = (ref: string): Agent | undefined => spec.agents.find((a) => a.id === ref)
 
@@ -65,15 +74,16 @@ export function PhaseSentence({
     )
   }
 
-  /** Model pill for a ref + its enforced mark (only when a model is pinned). */
-  const M = (ref: string): ReactNode => {
+  /** Model pill for a ref + its enforced mark, wrapped in the phase's `model`/`model2`
+   *  provenance key so hovering it lights the exact script line(s) that name this model. */
+  const M = (ref: string, field: 'model' | 'model2'): ReactNode => {
     const agent = agentOf(ref)
     if (!agent) return null
     return (
-      <>
+      <ProvSpan keys={key(field)}>
         <ModelToken value={agent.model} onChange={(model) => updateAgent(agent.id, { model })} />
         {agent.model !== INHERIT && <EnfMark />}
-      </>
+      </ProvSpan>
     )
   }
 
@@ -102,21 +112,24 @@ export function PhaseSentence({
       if (grant) {
         return (
           <p className={pline}>
-            {A(node.agent)} runs once on {M(node.agent)} and may delegate up to{' '}
-            <NumToken
-              value={grant.cap}
-              min={1}
-              max={16}
-              label="delegation cap"
-              onCommit={(n) => setGrantCap(index, n)}
-            />
-            <EnfMark /> sub-tasks to {A(grant.agent, 'secondary')} instances on {M(grant.agent)}
+            {A(node.agent)} runs once on {M(node.agent, 'model')} and may delegate up to{' '}
+            <ProvSpan keys={key('grant-cap')}>
+              <NumToken
+                value={grant.cap}
+                min={1}
+                max={16}
+                label="delegation cap"
+                onCommit={(n) => setGrantCap(index, n)}
+              />
+              <EnfMark />
+            </ProvSpan>{' '}
+            sub-tasks to {A(grant.agent, 'secondary')} instances on {M(grant.agent, 'model2')}
           </p>
         )
       }
       return (
         <p className={pline}>
-          {A(node.agent)} runs once on {M(node.agent)}
+          {A(node.agent)} runs once on {M(node.agent, 'model')}
         </p>
       )
     }
@@ -124,14 +137,17 @@ export function PhaseSentence({
       return (
         <p className={pline}>
           {A(node.agent)} runs once per item of {source()}, at most{' '}
-          <NumToken
-            value={node.cap}
-            min={1}
-            max={16}
-            label="fan-out cap"
-            onCommit={(n) => setFanoutCap(index, n)}
-          />
-          <EnfMark /> in parallel, on {M(node.agent)}
+          <ProvSpan keys={key('cap')}>
+            <NumToken
+              value={node.cap}
+              min={1}
+              max={16}
+              label="fan-out cap"
+              onCommit={(n) => setFanoutCap(index, n)}
+            />
+            <EnfMark />
+          </ProvSpan>{' '}
+          in parallel, on {M(node.agent, 'model')}
         </p>
       )
     case 'iterateUntil': {
@@ -147,14 +163,17 @@ export function PhaseSentence({
       return (
         <p className={pline}>
           {A(ref)} repeats up to{' '}
-          <NumToken
-            value={node.maxIter}
-            min={1}
-            max={20}
-            label="loop max iterations"
-            onCommit={(n) => setLoopMaxIter(index, n)}
-          />
-          <EnfMark /> times on {M(ref)}, stopping early when it reports done
+          <ProvSpan keys={key('iters')}>
+            <NumToken
+              value={node.maxIter}
+              min={1}
+              max={20}
+              label="loop max iterations"
+              onCommit={(n) => setLoopMaxIter(index, n)}
+            />
+            <EnfMark />
+          </ProvSpan>{' '}
+          times on {M(ref, 'model')}, stopping early when it reports done
         </p>
       )
     }
@@ -162,37 +181,43 @@ export function PhaseSentence({
       return (
         <p className={pline}>
           {A(node.map.agent)} runs once per item of {source()}, at most{' '}
-          <NumToken
-            value={node.map.cap}
-            min={1}
-            max={16}
-            label="map cap"
-            onCommit={(n) => setMapCap(index, n)}
-          />
-          <EnfMark /> in parallel, on {M(node.map.agent)}; then {A(node.reduce, 'secondary')} merges
-          every output into one result on {M(node.reduce)}
+          <ProvSpan keys={key('cap')}>
+            <NumToken
+              value={node.map.cap}
+              min={1}
+              max={16}
+              label="map cap"
+              onCommit={(n) => setMapCap(index, n)}
+            />
+            <EnfMark />
+          </ProvSpan>{' '}
+          in parallel, on {M(node.map.agent, 'model')}; then {A(node.reduce, 'secondary')} merges
+          every output into one result on {M(node.reduce, 'model2')}
         </p>
       )
     case 'adversarial':
       return (
         <p className={pline}>
-          {A(node.producer)} drafts on {M(node.producer)}; then {A(node.critic, 'secondary')}
-          attacks the draft on {M(node.critic)}
+          {A(node.producer)} drafts on {M(node.producer, 'model')}; then{' '}
+          {A(node.critic, 'secondary')} attacks the draft on {M(node.critic, 'model2')}
         </p>
       )
     case 'multiAngle':
       return (
         <p className={pline}>
           {A(node.agent)} runs{' '}
-          <NumToken
-            value={node.angles}
-            min={1}
-            max={8}
-            label="angles"
-            onCommit={(n) => setAngles(index, n)}
-          />
-          <EnfMark /> independent takes in parallel on {M(node.agent)}; then{' '}
-          {A(node.vote, 'secondary')} picks or synthesizes the best on {M(node.vote)}
+          <ProvSpan keys={key('angles')}>
+            <NumToken
+              value={node.angles}
+              min={1}
+              max={8}
+              label="angles"
+              onCommit={(n) => setAngles(index, n)}
+            />
+            <EnfMark />
+          </ProvSpan>{' '}
+          independent takes in parallel on {M(node.agent, 'model')}; then{' '}
+          {A(node.vote, 'secondary')} picks or synthesizes the best on {M(node.vote, 'model2')}
         </p>
       )
   }

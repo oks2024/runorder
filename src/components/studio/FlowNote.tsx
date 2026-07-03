@@ -1,6 +1,8 @@
 import { useWorkflowStore } from '@/store/workflowStore'
 import { deriveMemoryNames } from '@/lib/memoryNames'
 import { isSchemaForced } from '@/emit/plumbing'
+import { provKey } from '@/lib/prov'
+import { ProvSpan } from './ProvSpan'
 import type { EditableNode } from './roles'
 
 /**
@@ -22,6 +24,7 @@ export function FlowNote({
   const spec = useWorkflowStore((s) => s.spec)
   const setReads = useWorkflowStore((s) => s.setReads)
 
+  const nodeId = 'id' in node ? node.id : undefined
   const phases = spec.root.type === 'sequence' ? spec.root.steps : []
   const memories = deriveMemoryNames(spec) // aligned with `phases` by index
   const memoryAt = new Map<string, { name: string; at: number }>()
@@ -45,52 +48,54 @@ export function FlowNote({
     <p className="mt-3 font-mono text-[11.5px] text-ink-faint">
       {showReads && (
         <>
-          {reads.length > 0 && 'reads: '}
-          {reads.map((target) => {
-            const hit = memoryAt.get(target)
-            const valid = hit !== undefined && hit.at < index
-            return (
-              <button
-                key={target}
-                type="button"
-                className={
-                  valid
-                    ? `${mem} mr-1 hover:border-danger hover:text-danger`
-                    : 'mr-1 rounded-[4px] border border-danger/50 bg-danger/10 px-1.5 font-medium text-danger'
-                }
-                title={
-                  valid
-                    ? `Remove read "${hit.name}"`
-                    : `Unresolved read "${target}" — its phase is gone or later; click to remove`
-                }
-                onClick={() =>
-                  setReads(
-                    index,
-                    reads.filter((r) => r !== target),
-                  )
-                }
+          <ProvSpan keys={nodeId ? provKey(nodeId, 'reads') : undefined} className="-mx-1 px-1">
+            {reads.length > 0 && 'reads: '}
+            {reads.map((target) => {
+              const hit = memoryAt.get(target)
+              const valid = hit !== undefined && hit.at < index
+              return (
+                <button
+                  key={target}
+                  type="button"
+                  className={
+                    valid
+                      ? `${mem} mr-1 hover:border-danger hover:text-danger`
+                      : 'mr-1 rounded-[4px] border border-danger/50 bg-danger/10 px-1.5 font-medium text-danger'
+                  }
+                  title={
+                    valid
+                      ? `Remove read "${hit.name}"`
+                      : `Unresolved read "${target}" — its phase is gone or later; click to remove`
+                  }
+                  onClick={() =>
+                    setReads(
+                      index,
+                      reads.filter((r) => r !== target),
+                    )
+                  }
+                >
+                  [{valid ? hit.name : `${target}?`}] ×
+                </button>
+              )
+            })}
+            {readable.length > 0 && (
+              <select
+                value=""
+                aria-label="Add read"
+                className="mr-1 rounded-[4px] border border-dashed border-rule bg-transparent px-1 font-mono text-[11px] text-ink-faint outline-none hover:border-ink-faint hover:text-ink-dim focus-visible:outline-2 focus-visible:outline-focus"
+                onChange={(e) => {
+                  if (e.target.value) setReads(index, [...reads, e.target.value])
+                }}
               >
-                [{valid ? hit.name : `${target}?`}] ×
-              </button>
-            )
-          })}
-          {readable.length > 0 && (
-            <select
-              value=""
-              aria-label="Add read"
-              className="mr-1 rounded-[4px] border border-dashed border-rule bg-transparent px-1 font-mono text-[11px] text-ink-faint outline-none hover:border-ink-faint hover:text-ink-dim focus-visible:outline-2 focus-visible:outline-focus"
-              onChange={(e) => {
-                if (e.target.value) setReads(index, [...reads, e.target.value])
-              }}
-            >
-              <option value="">+ read…</option>
-              {readable.map((m) => (
-                <option key={m.nodeId} value={m.nodeId}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          )}
+                <option value="">+ read…</option>
+                {readable.map((m) => (
+                  <option key={m.nodeId} value={m.nodeId}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </ProvSpan>
           &nbsp;·&nbsp;
         </>
       )}
@@ -102,10 +107,10 @@ export function FlowNote({
         </>
       )}
       {forced && (
-        <>
+        <ProvSpan keys={nodeId ? provKey(nodeId, 'schema') : undefined} className="-mx-1 px-1">
           , schema-forced to <span className={mem}>{'{ context, items }'}</span> because a
           fan-out consumes it
-        </>
+        </ProvSpan>
       )}
     </p>
   )
