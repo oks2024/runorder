@@ -79,13 +79,51 @@ describe('workflowStore — agents', () => {
 })
 
 describe('workflowStore — composition (phases)', () => {
-  it('appends a step and a fanout', () => {
+  it('appends a step and a fanout, each with a generated id', () => {
     const n = steps().length
     store.getState().addStep('reviewer')
     store.getState().addFanout('investigator', 4)
     expect(steps()).toHaveLength(n + 2)
-    expect(steps()[n]).toEqual({ type: 'agent', agent: 'reviewer' })
-    expect(steps()[n + 1]).toEqual({ type: 'fanout', agent: 'investigator', cap: 4 })
+    const a = steps()[n]
+    const b = steps()[n + 1]
+    expect(a).toMatchObject({ type: 'agent', agent: 'reviewer' })
+    expect(b).toMatchObject({ type: 'fanout', agent: 'investigator', cap: 4 })
+    const aId = 'id' in a ? a.id : undefined
+    const bId = 'id' in b ? b.id : undefined
+    expect(aId).toBeTruthy()
+    expect(bId).toBeTruthy()
+    expect(aId).not.toBe(bId)
+  })
+
+  it('defaults reads to the previous phase for a sequential step', () => {
+    store.getState().addStep('reviewer')
+    const added = steps()[steps().length - 1]
+    expect(added.type === 'agent' && added.reads).toEqual(['n-synthesize'])
+  })
+
+  it('defaults fanout reads to the previous phase only when it will be schema-forced', () => {
+    // previous = synthesizer step (plain agent → will be forced to { context, items })
+    store.getState().addFanout('investigator', 4)
+    const afterStep = steps()[steps().length - 1]
+    expect(afterStep.type === 'fanout' && afterStep.reads).toEqual(['n-synthesize'])
+    // previous = that fanout (array output → reading it would duplicate the item list)
+    store.getState().addFanout('investigator', 4)
+    const afterFanout = steps()[steps().length - 1]
+    expect(afterFanout.type === 'fanout' && afterFanout.reads).toEqual([])
+  })
+
+  it('setReads replaces a phase reads list and dedupes', () => {
+    store.getState().setReads(2, ['n-review', 'n-investigate', 'n-review'])
+    const node = steps()[2]
+    expect(node.type === 'agent' && node.reads).toEqual(['n-review', 'n-investigate'])
+    expect(validateSpec(spec())).toEqual({ ok: true })
+  })
+
+  it('removePhase leaves reads dangling on purpose (surfaced by validateSpec)', () => {
+    store.getState().removePhase(0) // fanout still reads n-review
+    const result = validateSpec(spec())
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.issues[0]).toMatchObject({ code: 'dangling-read', ref: 'n-review' })
   })
 
   it('clamps a fanout cap on add and on set', () => {
@@ -100,14 +138,14 @@ describe('workflowStore — composition (phases)', () => {
     const n = steps().length
     store.getState().removePhase(0)
     expect(steps()).toHaveLength(n - 1)
-    expect(steps()[0]).toEqual({ type: 'fanout', agent: 'investigator', cap: 8 })
+    expect(steps()[0]).toMatchObject({ type: 'fanout', agent: 'investigator', cap: 8 })
   })
 
   it('moves a phase and respects bounds', () => {
     // seed: [reviewer step, investigator fanout, synthesizer step]
     store.getState().movePhase(0, 1)
     expect(steps()[0]).toMatchObject({ type: 'fanout', agent: 'investigator' })
-    expect(steps()[1]).toEqual({ type: 'agent', agent: 'reviewer' })
+    expect(steps()[1]).toMatchObject({ type: 'agent', agent: 'reviewer' })
     // out-of-bounds is a no-op
     store.getState().movePhase(0, -1)
     expect(steps()[0]).toMatchObject({ type: 'fanout', agent: 'investigator' })
@@ -115,19 +153,19 @@ describe('workflowStore — composition (phases)', () => {
 
   it('retargets a phase agent', () => {
     store.getState().setPhaseAgent(0, 'synthesizer')
-    expect(steps()[0]).toEqual({ type: 'agent', agent: 'synthesizer' })
+    expect(steps()[0]).toMatchObject({ type: 'agent', agent: 'synthesizer' })
   })
 
   it('setFanoutCap is a no-op on a non-fanout phase', () => {
     store.getState().setFanoutCap(0, 5) // phase 0 is a step
-    expect(steps()[0]).toEqual({ type: 'agent', agent: 'reviewer' })
+    expect(steps()[0]).toMatchObject({ type: 'agent', agent: 'reviewer' })
   })
 
   it('appends a loop with a single-agent body and default maxIter', () => {
     const n = steps().length
     store.getState().addLoop('reviewer')
     expect(steps()).toHaveLength(n + 1)
-    expect(steps()[n]).toEqual({
+    expect(steps()[n]).toMatchObject({
       type: 'iterateUntil',
       body: { type: 'agent', agent: 'reviewer' },
       maxIter: 3,
@@ -146,7 +184,7 @@ describe('workflowStore — composition (phases)', () => {
     store.getState().addLoop('reviewer')
     const idx = steps().length - 1
     store.getState().setPhaseAgent(idx, 'synthesizer')
-    expect(steps()[idx]).toEqual({
+    expect(steps()[idx]).toMatchObject({
       type: 'iterateUntil',
       body: { type: 'agent', agent: 'synthesizer' },
       maxIter: 3,
@@ -164,19 +202,19 @@ describe('workflowStore — composition (phases)', () => {
     store.getState().addMultiAngle('reviewer', 'synthesizer', 4)
     store.getState().addDelegate('reviewer', 'investigator', 5)
     const s = steps()
-    expect(s[s.length - 4]).toEqual({
+    expect(s[s.length - 4]).toMatchObject({
       type: 'mapReduce',
       map: { agent: 'investigator', cap: 6 },
       reduce: 'synthesizer',
     })
-    expect(s[s.length - 3]).toEqual({ type: 'adversarial', producer: 'reviewer', critic: 'investigator' })
-    expect(s[s.length - 2]).toEqual({
+    expect(s[s.length - 3]).toMatchObject({ type: 'adversarial', producer: 'reviewer', critic: 'investigator' })
+    expect(s[s.length - 2]).toMatchObject({
       type: 'multiAngle',
       agent: 'reviewer',
       angles: 4,
       vote: 'synthesizer',
     })
-    expect(s[s.length - 1]).toEqual({
+    expect(s[s.length - 1]).toMatchObject({
       type: 'agent',
       agent: 'reviewer',
       grants: [{ agent: 'investigator', cap: 5 }],
@@ -189,7 +227,7 @@ describe('workflowStore — composition (phases)', () => {
     const idx = steps().length - 1
     store.getState().setPhaseAgent(idx, 'investigator') // primary = map agent
     store.getState().setPhaseSecondaryAgent(idx, 'reviewer') // secondary = reduce
-    expect(steps()[idx]).toEqual({
+    expect(steps()[idx]).toMatchObject({
       type: 'mapReduce',
       map: { agent: 'investigator', cap: 4 },
       reduce: 'reviewer',

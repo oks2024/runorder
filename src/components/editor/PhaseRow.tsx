@@ -1,7 +1,10 @@
 import { useWorkflowStore } from '@/store/workflowStore'
+import { deriveMemoryNames } from '@/lib/memoryNames'
+import { isSchemaForced } from '@/emit/plumbing'
 import type { PatternNode } from '@/spec/schema'
 import { cn } from '@/lib/utils'
 import { AgentSelect } from './AgentSelect'
+import { PATTERN_INFO, ROLE_TIPS } from './patternInfo'
 
 const iconBtn =
   'rounded-[5px] border border-transparent px-1.5 py-0.5 font-mono text-xs leading-none text-ink-faint hover:border-line hover:text-ink disabled:opacity-40 disabled:hover:border-transparent'
@@ -24,23 +27,44 @@ export function PhaseRow({ node, index, count }: { node: EditableNode; index: nu
   const setMapCap = useWorkflowStore((s) => s.setMapCap)
   const setAngles = useWorkflowStore((s) => s.setAngles)
   const setGrantCap = useWorkflowStore((s) => s.setGrantCap)
+  const setReads = useWorkflowStore((s) => s.setReads)
+  const spec = useWorkflowStore((s) => s.spec)
 
   const grant = node.type === 'agent' ? node.grants?.[0] : undefined
 
-  const badge =
+  // --- explicit context flow: this phase's reads + the memories it could read ---
+  const phases = spec.root.type === 'sequence' ? spec.root.steps : []
+  const memories = deriveMemoryNames(spec) // aligned with `phases` by index
+  const memoryAt = new Map<string, { name: string; at: number }>()
+  memories.forEach((m, at) => {
+    if (m.nodeId) memoryAt.set(m.nodeId, { name: m.name, at })
+  })
+  const reads = node.reads ?? []
+  const readable = memories
+    .slice(0, index)
+    .filter((m): m is { nodeId: string; name: string } => !!m.nodeId && !reads.includes(m.nodeId))
+  // Output is runtime-forced to { context, items }: feeds a fan-out, or delegates.
+  const forced = (phases.length > index && isSchemaForced(phases, index)) || !!grant
+
+  const patternKey =
     node.type === 'fanout'
-      ? { cls: dynBadge, label: '⋔ Fan-out' }
+      ? 'fanout'
       : node.type === 'iterateUntil'
-        ? { cls: dynBadge, label: '↻ Loop' }
+        ? 'loop'
         : node.type === 'mapReduce'
-          ? { cls: dynBadge, label: '⇉ Map-reduce' }
+          ? 'mapReduce'
           : node.type === 'adversarial'
-            ? { cls: dynBadge, label: '⚔ Adversarial' }
+            ? 'adversarial'
             : node.type === 'multiAngle'
-              ? { cls: dynBadge, label: '✳ Multi-angle' }
+              ? 'multiAngle'
               : grant
-                ? { cls: dynBadge, label: '⇲ Delegate' }
-                : { cls: stepBadge, label: '● Step' }
+                ? 'delegate'
+                : 'step'
+  const badge = {
+    cls: patternKey === 'step' ? stepBadge : dynBadge,
+    label: PATTERN_INFO[patternKey].badge,
+    tip: PATTERN_INFO[patternKey].tip,
+  }
 
   const primaryRef =
     node.type === 'iterateUntil'
@@ -68,13 +92,13 @@ export function PhaseRow({ node, index, count }: { node: EditableNode; index: nu
 
   const secondary =
     node.type === 'mapReduce'
-      ? { ref: node.reduce, label: 'reduce' }
+      ? { ref: node.reduce, label: 'reduce' as const }
       : node.type === 'adversarial'
-        ? { ref: node.critic, label: 'critic' }
+        ? { ref: node.critic, label: 'critic' as const }
         : node.type === 'multiAngle'
-          ? { ref: node.vote, label: 'vote' }
+          ? { ref: node.vote, label: 'vote' as const }
           : grant
-            ? { ref: grant.agent, label: 'delegate' }
+            ? { ref: grant.agent, label: 'delegate' as const }
             : null
 
   return (
@@ -88,9 +112,19 @@ export function PhaseRow({ node, index, count }: { node: EditableNode; index: nu
             'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-[10px] tracking-[0.08em] uppercase',
             badge.cls,
           )}
+          title={badge.tip}
         >
           {badge.label}
         </span>
+        {forced && (
+          <span
+            className="inline-flex items-center gap-1 rounded-[5px] border border-enforced/40 bg-enforced/10 px-1.5 py-px font-mono text-[9px] font-semibold tracking-[0.12em] text-enforced uppercase"
+            title="Feeds a fan-out: output is runtime-forced to { context, items } — readers get the context, the fan-out maps the exact items"
+          >
+            <span className="size-[5px] rounded-full bg-enforced shadow-[0_0_6px_var(--color-enforced)]" />
+            items[]
+          </span>
+        )}
         <span className="ml-auto inline-flex gap-0.5">
           <button type="button" className={iconBtn} title="Move up" disabled={index === 0} onClick={() => movePhase(index, -1)}>
             ↑
@@ -138,10 +172,70 @@ export function PhaseRow({ node, index, count }: { node: EditableNode; index: nu
 
       {secondary && (
         <div className="mt-1.5 flex items-center gap-2 pl-[18px]">
-          <span className="w-[52px] flex-none text-right font-mono text-[9.5px] tracking-[0.08em] text-ink-faint uppercase">
+          <span
+            className="w-[52px] flex-none text-right font-mono text-[9.5px] tracking-[0.08em] text-ink-faint uppercase"
+            title={ROLE_TIPS[secondary.label]}
+          >
             {secondary.label} →
           </span>
           <AgentSelect value={secondary.ref} onChange={(id) => setPhaseSecondaryAgent(index, id)} />
+        </div>
+      )}
+
+      {(reads.length > 0 || readable.length > 0) && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-[18px]">
+          <span
+            className="w-[52px] flex-none text-right font-mono text-[9.5px] tracking-[0.08em] text-ink-faint uppercase"
+            title="The earlier-phase memories spliced into this phase's prompts — nothing else flows in"
+          >
+            reads →
+          </span>
+          {reads.map((target) => {
+            const hit = memoryAt.get(target)
+            const valid = hit !== undefined && hit.at < index
+            return (
+              <button
+                key={target}
+                type="button"
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10.5px]',
+                  valid
+                    ? 'border-line bg-well text-ink-dim hover:border-danger/45 hover:text-danger'
+                    : 'border-danger/45 bg-danger/10 text-danger',
+                )}
+                title={
+                  valid
+                    ? `Remove read "${hit.name}"`
+                    : `Unresolved read "${target}" — the phase it points at is gone or later; click to remove`
+                }
+                onClick={() =>
+                  setReads(
+                    index,
+                    reads.filter((r) => r !== target),
+                  )
+                }
+              >
+                [{valid ? hit.name : `${target}?`}] ×
+              </button>
+            )
+          })}
+          {readable.length > 0 && (
+            <select
+              value=""
+              aria-label="Add read"
+              className="rounded-md border border-dashed border-line bg-transparent px-1.5 py-0.5 font-mono text-[10.5px] text-ink-faint outline-none hover:border-ink-faint hover:text-ink-dim focus-visible:outline-2 focus-visible:outline-focus"
+              onChange={(e) => {
+                if (e.target.value) setReads(index, [...reads, e.target.value])
+              }}
+            >
+              <option value="">+ read…</option>
+              {readable.map((m) => (
+                <option key={m.nodeId} value={m.nodeId}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       )}
     </div>

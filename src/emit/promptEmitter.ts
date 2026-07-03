@@ -1,5 +1,5 @@
 /**
- * Prompt emitter — the durable, primary output path.
+ * Prompt emitter — the durable fallback output path (the script emitter is primary).
  *
  * Serializes a `WorkflowSpec` into a SINGLE structured-Markdown artifact (no separate JSON
  * block) that a Claude Code user pastes, approves, and runs. The artifact is the one
@@ -18,6 +18,8 @@
  * faithfulness fixture suite's guard (emit specs → diff the phase plan against the spec).
  */
 import { INHERIT, resolveAlias } from '@/lib/models'
+import { deriveMemoryNames } from '@/lib/memoryNames'
+import { isSchemaForced } from './plumbing'
 import type { PatternNode, WorkflowSpec } from '@/spec/schema'
 
 const PHASE_LABEL_WIDTH = 7 // 'fan-out'.length
@@ -96,8 +98,32 @@ function renderPhase(spec: WorkflowSpec, node: PatternNode, index: number): stri
 
 function renderPhases(spec: WorkflowSpec): string {
   const phases = spec.root.type === 'sequence' ? spec.root.steps : [spec.root]
-  const lines: string[] = ['## Phases (ordered top→down; each phase passes its results forward)']
-  phases.forEach((node, i) => lines.push(renderPhase(spec, node, i)))
+  const names = deriveMemoryNames(spec)
+  const nameById = new Map<string, string>()
+  names.forEach((e) => {
+    if (e.nodeId) nameById.set(e.nodeId, e.name)
+  })
+
+  const lines: string[] = [
+    '## Phases (ordered top→down; context flows ONLY through the reads listed per phase)',
+    'Each phase output is a named memory (the agent name below). Give an agent EXACTLY the',
+    "memories its phase reads — nothing else flows implicitly. These are the tool's intended",
+    'semantics; the script path enforces them, this prompt path asks you to honor them.',
+  ]
+  phases.forEach((node, i) => {
+    let line = renderPhase(spec, node, i)
+    const reads = 'reads' in node ? (node.reads ?? []) : []
+    if (reads.length) {
+      const readNames = reads.map((t) => nameById.get(t) ?? `«${t}?»`)
+      line += ` · reads: ${readNames.join(', ')}`
+    }
+    if (isSchemaForced(phases, i)) {
+      line +=
+        ' · must END its output with ONLY the list of items to fan out over,' +
+        ' one per blank-line-separated block (shared context first, clearly separated)'
+    }
+    lines.push(line)
+  })
   return lines.join('\n')
 }
 

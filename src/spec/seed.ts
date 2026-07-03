@@ -7,6 +7,10 @@
  *   2. fan-out — investigator  (Sonnet) one per finding, dynamic-N, cap 8
  *   3. step    — synthesizer   (Haiku)  merge into one ranked summary
  *
+ * Context flow is explicit (`reads` on each node): the fan-out workers read the reviewer's
+ * shared context (its output is schema-forced to { context, items } because it feeds the
+ * fan-out); the synthesizer reads the fan-out's investigation reports.
+ *
  * Used by tests now; the UI will load it as the default workspace later.
  */
 import type { WorkflowSpec } from './schema'
@@ -41,9 +45,9 @@ export const codeReviewLoop: WorkflowSpec = {
   root: {
     type: 'sequence',
     steps: [
-      { type: 'agent', agent: 'reviewer' },
-      { type: 'fanout', agent: 'investigator', cap: 8 },
-      { type: 'agent', agent: 'synthesizer' },
+      { type: 'agent', agent: 'reviewer', id: 'n-review' },
+      { type: 'fanout', agent: 'investigator', cap: 8, id: 'n-investigate', reads: ['n-review'] },
+      { type: 'agent', agent: 'synthesizer', id: 'n-synthesize', reads: ['n-investigate'] },
     ],
   },
 }

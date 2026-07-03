@@ -74,4 +74,66 @@ describe('Editor UI — store-bound behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
     await waitFor(() => expect(screen.getByText('✓ Copied')).toBeInTheDocument())
   })
+
+  it('describes every pattern with a tooltip on both the badge and the add button', () => {
+    render(<App />)
+    // add buttons carry the pattern tooltips
+    expect(screen.getByRole('button', { name: '+ Map-reduce' })).toHaveAttribute(
+      'title',
+      expect.stringContaining('a reduce agent merges all map outputs'),
+    )
+    expect(screen.getByRole('button', { name: '+ Adversarial' })).toHaveAttribute(
+      'title',
+      expect.stringContaining('a critic attacks the draft'),
+    )
+    expect(screen.getByRole('button', { name: '+ Multi-angle' })).toHaveAttribute(
+      'title',
+      expect.stringContaining('N times in parallel on the same input'),
+    )
+    expect(screen.getByRole('button', { name: '+ Delegate' })).toHaveAttribute(
+      'title',
+      expect.stringContaining('decides the sub-tasks at run time'),
+    )
+    // phase badges carry the same copy (seed has a fan-out)
+    expect(screen.getByText('⋔ Fan-out')).toHaveAttribute(
+      'title',
+      expect.stringContaining('Dynamic-N parallel copies'),
+    )
+  })
+
+  it('shows reads chips and the enforced items[] badge from the seed wiring', () => {
+    render(<App />)
+    // fan-out reads the reviewer's memory; synthesizer reads the fan-out's
+    expect(screen.getByRole('button', { name: '[reviewer] ×' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '[investigator] ×' })).toBeInTheDocument()
+    // reviewer feeds the fan-out → runtime-forced { context, items }
+    expect(
+      screen.getByTitle(/output is runtime-forced to \{ context, items \}/),
+    ).toBeInTheDocument()
+  })
+
+  it('removing a read chip drops the splice from the emitted script', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '[reviewer] ×' }))
+    expect(script().textContent).not.toContain('[reviewer]')
+    expect(screen.queryByRole('button', { name: '[reviewer] ×' })).not.toBeInTheDocument()
+  })
+
+  it('adding a read via the picker splices it into the emitted script', () => {
+    render(<App />)
+    // the synthesizer phase (index 2) can additionally read the reviewer memory
+    const pickers = screen.getAllByLabelText('Add read')
+    const synthPicker = pickers[pickers.length - 1]
+    fireEvent.change(synthPicker, { target: { value: 'n-review' } })
+    expect(script().textContent).toContain('"\\n\\n[reviewer]\\n" + asText(p1.context)')
+    expect(script().textContent).toContain('"\\n\\n[investigator]\\n" + asText(p2)')
+  })
+
+  it('removing a phase leaves dependent reads dangling and flips the pill', () => {
+    render(<App />)
+    fireEvent.click(screen.getAllByTitle('Remove phase')[0]) // reviewer step
+    expect(screen.getByText('1 issue')).toBeInTheDocument()
+    // the fan-out's read chip renders in its unresolved (still removable) state
+    expect(screen.getByRole('button', { name: '[n-review?] ×' })).toBeInTheDocument()
+  })
 })

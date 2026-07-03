@@ -48,24 +48,48 @@ export interface Grant {
 }
 
 /**
+ * Node identity + explicit context flow ("memories").
+ *
+ * Every root-sequence step's output becomes a named memory; a node's `reads` lists the
+ * `id`s of the EARLIER root steps whose memories are spliced (labeled) into its prompts at
+ * emit time. Data no longer flows implicitly — `reads` absent/empty means the agent gets
+ * only its own prompt (plus the pattern's own piping: fan-out item, critic draft, …).
+ *
+ * `id` is optional in the schema (hand-written specs stay valid; such nodes just can't be
+ * read from) but the store factories and the seed always provide one. Reads referencing a
+ * missing/later/duplicate id are surfaced by `validate.ts`, never silently dropped.
+ */
+interface NodeBase {
+  /** Stable opaque node id; `reads` entries point here. */
+  id?: string
+  /** Ids of earlier root steps whose memories this node's prompts receive. */
+  reads?: string[]
+}
+
+/**
  * Composition tree. Self-referential (`sequence.steps`, `iterateUntil.body`), so the TS
  * type is declared explicitly and the schema is annotated `z.ZodType<PatternNode>` via
  * `z.lazy`. V1 editor exposes only `sequence` + `fanout`; the rest are model-only for now.
  */
 export type PatternNode =
-  | { type: 'sequence'; steps: PatternNode[] } // implicit forward-passing of results
-  | { type: 'fanout'; agent: AgentRef; cap: number } // maps over prior output, dynamic N, ≤ cap
+  | { type: 'sequence'; steps: PatternNode[] } // ordered phases; context flows via `reads`
+  | (NodeBase & { type: 'fanout'; agent: AgentRef; cap: number }) // maps over prior items, dynamic N, ≤ cap
   // --- deferred patterns (model supports them; V1 editor does not expose) ---
-  | { type: 'mapReduce'; map: { agent: AgentRef; cap: number }; reduce: AgentRef }
-  | { type: 'adversarial'; producer: AgentRef; critic: AgentRef }
-  | { type: 'multiAngle'; agent: AgentRef; angles: number; vote: AgentRef }
-  | { type: 'iterateUntil'; body: PatternNode; maxIter: number }
-  | { type: 'agent'; agent: AgentRef; grants?: Grant[] } // A+ leaf (a single-agent step)
+  | (NodeBase & { type: 'mapReduce'; map: { agent: AgentRef; cap: number }; reduce: AgentRef })
+  | (NodeBase & { type: 'adversarial'; producer: AgentRef; critic: AgentRef })
+  | (NodeBase & { type: 'multiAngle'; agent: AgentRef; angles: number; vote: AgentRef })
+  | (NodeBase & { type: 'iterateUntil'; body: PatternNode; maxIter: number })
+  | (NodeBase & { type: 'agent'; agent: AgentRef; grants?: Grant[] }) // A+ leaf (a single-agent step)
 
 const grantSchema: z.ZodType<Grant> = z.object({
   agent: agentRefSchema,
   cap: z.number().int().min(1).max(16),
 })
+
+const nodeBaseShape = {
+  id: z.string().min(1).optional(),
+  reads: z.array(z.string().min(1)).optional(),
+}
 
 export const patternNodeSchema: z.ZodType<PatternNode> = z.lazy(() =>
   z.discriminatedUnion('type', [
@@ -77,32 +101,38 @@ export const patternNodeSchema: z.ZodType<PatternNode> = z.lazy(() =>
       type: z.literal('fanout'),
       agent: agentRefSchema,
       cap: z.number().int().min(1).max(16),
+      ...nodeBaseShape,
     }),
     z.object({
       type: z.literal('mapReduce'),
       map: z.object({ agent: agentRefSchema, cap: z.number().int().min(1).max(16) }),
       reduce: agentRefSchema,
+      ...nodeBaseShape,
     }),
     z.object({
       type: z.literal('adversarial'),
       producer: agentRefSchema,
       critic: agentRefSchema,
+      ...nodeBaseShape,
     }),
     z.object({
       type: z.literal('multiAngle'),
       agent: agentRefSchema,
       angles: z.number().int().min(1),
       vote: agentRefSchema,
+      ...nodeBaseShape,
     }),
     z.object({
       type: z.literal('iterateUntil'),
       body: patternNodeSchema,
       maxIter: z.number().int().min(1),
+      ...nodeBaseShape,
     }),
     z.object({
       type: z.literal('agent'),
       agent: agentRefSchema,
       grants: z.array(grantSchema).optional(),
+      ...nodeBaseShape,
     }),
   ]),
 )

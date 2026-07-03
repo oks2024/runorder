@@ -8,13 +8,16 @@
  * `leadAgent → grantedAgent`, and a cycle in that directed graph (including a self-grant)
  * would be an unbounded delegation loop. The plain `sequence`/`fanout` tree still has no
  * back-edges, so specs without grants never trip this.
+ *
+ * Explicit context flow adds two more rules: root node ids must be unique, and every
+ * `reads` entry must resolve to an EARLIER root step's id (see `collectReadsIssues`).
  */
 import type { PatternNode, WorkflowSpec, AgentRef } from './schema'
 
 export interface ValidationIssue {
-  code: 'dangling-ref' | 'delegation-cycle'
+  code: 'dangling-ref' | 'delegation-cycle' | 'dangling-read' | 'duplicate-node-id'
   message: string
-  /** The offending agent ref (unresolved, or a node on the delegation cycle). */
+  /** The offending ref: an agent ref, a read target node id, or a duplicated node id. */
   ref: AgentRef
 }
 
@@ -100,8 +103,52 @@ function firstDelegationCycle(edges: Array<[AgentRef, AgentRef]>): AgentRef | nu
 }
 
 /**
+ * Reads rules over the root phase list: node ids must be unique, and every `reads` entry
+ * must resolve to the id of an EARLIER root step (no self/forward reads — a memory only
+ * exists once its phase has run). Reorder/remove can break reads on purpose; this is the
+ * pass that surfaces it (same philosophy as dangling agent refs).
+ */
+function collectReadsIssues(spec: WorkflowSpec, issues: ValidationIssue[]): void {
+  const steps = spec.root.type === 'sequence' ? spec.root.steps : [spec.root]
+
+  const seen = new Set<string>()
+  const reported = new Set<string>()
+  for (const node of steps) {
+    const id = 'id' in node ? node.id : undefined
+    if (!id) continue
+    if (seen.has(id) && !reported.has(id)) {
+      reported.add(id)
+      issues.push({
+        code: 'duplicate-node-id',
+        ref: id,
+        message: `Node id "${id}" is used by more than one phase — reads targeting it are ambiguous.`,
+      })
+    }
+    seen.add(id)
+  }
+
+  const earlier = new Set<string>()
+  const badReads = new Set<string>()
+  for (const node of steps) {
+    const reads = 'reads' in node ? node.reads : undefined
+    for (const target of reads ?? []) {
+      if (!earlier.has(target) && !badReads.has(target)) {
+        badReads.add(target)
+        issues.push({
+          code: 'dangling-read',
+          ref: target,
+          message: `Read "${target}" does not resolve to an earlier phase — a memory only exists once its phase has run.`,
+        })
+      }
+    }
+    const id = 'id' in node ? node.id : undefined
+    if (id) earlier.add(id)
+  }
+}
+
+/**
  * Validate the graph rules over an already-schema-valid spec.
- * Returns all dangling-ref and delegation-cycle issues (or `{ ok: true }`).
+ * Returns all dangling-ref, delegation-cycle, and reads issues (or `{ ok: true }`).
  */
 export function validateSpec(spec: WorkflowSpec): ValidationResult {
   const defined = new Set(spec.agents.map((a) => a.id))
@@ -131,6 +178,8 @@ export function validateSpec(spec: WorkflowSpec): ValidationResult {
       message: `Delegation cycle through agent "${cycleAgent}" — a grant chain loops back on itself.`,
     })
   }
+
+  collectReadsIssues(spec, issues)
 
   return issues.length === 0 ? { ok: true } : { ok: false, issues }
 }

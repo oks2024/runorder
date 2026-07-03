@@ -79,6 +79,26 @@ describe('emitPrompt — faithfulness contract', () => {
     expect(out).toContain('may delegate to beta, ≤ 2 instances')
   })
 
+  it('states each phase reads and the fan-out list format (intended, not enforced)', () => {
+    const out = emitPrompt(codeReviewLoop)
+    expect(out).toContain('context flows ONLY through the reads listed per phase')
+    expect(out).toContain('· reads: reviewer')
+    expect(out).toContain('· reads: investigator')
+    // the reviewer feeds the fan-out → list-format instruction on ITS phase line
+    expect(out).toMatch(/1\. step {4}— reviewer.*must END its output with ONLY the list of items/)
+  })
+
+  it('marks an unresolvable read instead of dropping it silently', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'agent', agent: 'reviewer', id: 'n1', reads: ['ghost'] }],
+      },
+    }
+    expect(emitPrompt(spec)).toContain('«ghost?»')
+  })
+
   it('marks a dangling agent ref rather than dropping it silently', () => {
     const spec: WorkflowSpec = {
       ...codeReviewLoop,
@@ -108,10 +128,13 @@ describe('emitPrompt — faithfulness contract', () => {
       - synthesizer → claude-haiku-4-5
           Merge all investigation reports into one ranked review summary with clear next actions.
 
-      ## Phases (ordered top→down; each phase passes its results forward)
-      1. step    — reviewer
-      2. fan-out — investigator over phase 1 output (dynamic-N, cap 8)
-      3. step    — synthesizer
+      ## Phases (ordered top→down; context flows ONLY through the reads listed per phase)
+      Each phase output is a named memory (the agent name below). Give an agent EXACTLY the
+      memories its phase reads — nothing else flows implicitly. These are the tool's intended
+      semantics; the script path enforces them, this prompt path asks you to honor them.
+      1. step    — reviewer · must END its output with ONLY the list of items to fan out over, one per blank-line-separated block (shared context first, clearly separated)
+      2. fan-out — investigator over phase 1 output (dynamic-N, cap 8) · reads: reviewer
+      3. step    — synthesizer · reads: investigator
 
       Before running, show the planned phases, the model per stage, and the per-stage caps for approval."
     `)

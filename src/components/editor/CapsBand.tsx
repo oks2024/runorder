@@ -102,6 +102,7 @@ export function CapsBand() {
             value={concurrency}
             onChange={(e) => setConcurrency(e.target.valueAsNumber)}
             aria-label="Concurrency cap"
+            title="How many agents may run at the same moment. The runtime applies its own global concurrency cap; this states your intent for the run."
           />
           <span className="text-[11px] font-normal text-ink-faint">/ 16</span>
         </span>
@@ -127,6 +128,7 @@ export function CapsBand() {
             value={total}
             onChange={(e) => setTotal(e.target.valueAsNumber)}
             aria-label="Total agent cap"
+            title="Ceiling on how many agents the whole run may spawn. Fan-out counts are capped in-script per phase; this is the workflow-level bound you intend."
           />
           <span className="text-[11px] font-normal text-ink-faint">/ 1000</span>
         </span>

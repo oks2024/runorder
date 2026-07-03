@@ -47,7 +47,15 @@ export function AgentStrip({ agent, index }: { agent: Agent; index: number }) {
       </div>
       <ModelCombobox value={agent.model} onChange={(model) => updateAgent(agent.id, { model })} />
 
-      <div className={fieldLabel}>Prompt</div>
+      <div className={`${fieldLabel} flex items-baseline gap-2`}>
+        Prompt
+        <span
+          className="normal-case tracking-normal"
+          title="Write only what this agent should do. Context reads, the fan-out item, and any forced output schema are appended at emit time — see the Emit pane."
+        >
+          · plumbing appended at emit
+        </span>
+      </div>
       <textarea
         className="min-h-[64px] w-full resize-y rounded-md border border-line bg-well px-2 py-1.5 text-[13px] leading-relaxed text-ink outline-none focus-visible:outline-2 focus-visible:outline-focus"
         value={agent.prompt}

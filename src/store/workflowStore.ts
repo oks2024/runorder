@@ -17,7 +17,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { INHERIT } from '@/lib/models'
 import { codeReviewLoop } from '@/spec/seed'
-import type { Agent, WorkflowSpec } from '@/spec/schema'
+import type { Agent, PatternNode, WorkflowSpec } from '@/spec/schema'
 
 const CONCURRENCY_MAX = 16
 const TOTAL_MAX = 1000
@@ -64,6 +64,8 @@ export interface WorkflowState {
   setPhaseAgent: (index: number, agentId: string) => void
   /** Set the secondary agent of a composite phase (reduce/critic/vote/grant target). */
   setPhaseSecondaryAgent: (index: number, agentId: string) => void
+  /** Replace a phase's memory reads (ids of earlier phases; validated by validateSpec). */
+  setReads: (index: number, reads: string[]) => void
   setFanoutCap: (index: number, cap: number) => void
   setLoopMaxIter: (index: number, maxIter: number) => void
   setMapCap: (index: number, cap: number) => void
@@ -75,11 +77,32 @@ export interface WorkflowState {
   load: (spec?: WorkflowSpec) => void
 }
 
-function newAgentId(): string {
+function newId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
   }
   return 'a-' + Math.random().toString(36).slice(2, 10)
+}
+
+/**
+ * Default `reads` for a phase appended after `steps`.
+ *
+ * Sequential-input kinds read the previous phase (matches the pre-reads behavior, never
+ * worse). Item-fed kinds (fan-out / map-reduce) already receive the previous phase through
+ * their *items*; they pre-read it only when the previous phase will be schema-forced to
+ * `{ context, items }` — then the read splices the cheap shared `context`, not a duplicate
+ * of the item list. Reading an array-yielding previous phase would send every worker all
+ * of its siblings' inputs, so those default to no reads.
+ */
+function defaultReads(steps: PatternNode[], itemFed: boolean): string[] {
+  const prev = steps[steps.length - 1]
+  if (!prev || prev.type === 'sequence' || !prev.id) return []
+  if (!itemFed) return [prev.id]
+  const schemaForcible =
+    (prev.type === 'agent' && !(prev.grants && prev.grants.length > 0)) ||
+    prev.type === 'mapReduce' ||
+    prev.type === 'multiAngle'
+  return schemaForcible ? [prev.id] : []
 }
 
 function clampInt(n: number, min: number, max: number): number | undefined {
@@ -113,7 +136,7 @@ export const useWorkflowStore = create<WorkflowState>()(
       }),
 
     addAgent: () => {
-      const id = newAgentId()
+      const id = newId()
       set((s) => {
         s.spec.agents.push({
           id,
@@ -146,6 +169,8 @@ export const useWorkflowStore = create<WorkflowState>()(
         s.spec.root.steps.push({
           type: 'agent',
           agent: agentId ?? s.spec.agents[0]?.id ?? '',
+          id: newId(),
+          reads: defaultReads(s.spec.root.steps, false),
         })
       }),
 
@@ -156,6 +181,8 @@ export const useWorkflowStore = create<WorkflowState>()(
           type: 'fanout',
           agent: agentId ?? s.spec.agents[0]?.id ?? '',
           cap: clampInt(cap ?? s.spec.caps.concurrency, 1, FANOUT_CAP_MAX) ?? 1,
+          id: newId(),
+          reads: defaultReads(s.spec.root.steps, true),
         })
       }),
 
@@ -166,6 +193,8 @@ export const useWorkflowStore = create<WorkflowState>()(
           type: 'iterateUntil',
           body: { type: 'agent', agent: agentId ?? s.spec.agents[0]?.id ?? '' },
           maxIter: clampInt(maxIter ?? LOOP_ITER_DEFAULT, 1, LOOP_ITER_MAX) ?? 1,
+          id: newId(),
+          reads: defaultReads(s.spec.root.steps, false),
         })
       }),
 
@@ -181,6 +210,8 @@ export const useWorkflowStore = create<WorkflowState>()(
             cap: clampInt(cap ?? s.spec.caps.concurrency, 1, FANOUT_CAP_MAX) ?? 1,
           },
           reduce: reduceAgentId ?? second,
+          id: newId(),
+          reads: defaultReads(s.spec.root.steps, true),
         })
       }),
 
@@ -193,6 +224,8 @@ export const useWorkflowStore = create<WorkflowState>()(
           type: 'adversarial',
           producer: producerId ?? first,
           critic: criticId ?? second,
+          id: newId(),
+          reads: defaultReads(s.spec.root.steps, false),
         })
       }),
 
@@ -206,6 +239,8 @@ export const useWorkflowStore = create<WorkflowState>()(
           agent: agentId ?? first,
           angles: clampInt(angles ?? ANGLES_DEFAULT, 1, ANGLES_MAX) ?? 1,
           vote: voteId ?? second,
+          id: newId(),
+          reads: defaultReads(s.spec.root.steps, false),
         })
       }),
 
@@ -223,9 +258,21 @@ export const useWorkflowStore = create<WorkflowState>()(
               cap: clampInt(cap ?? s.spec.caps.concurrency, 1, FANOUT_CAP_MAX) ?? 1,
             },
           ],
+          id: newId(),
+          reads: defaultReads(s.spec.root.steps, false),
         })
       }),
 
+    setReads: (index, reads) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        if (!node || node.type === 'sequence') return
+        node.reads = [...new Set(reads)]
+      }),
+
+    // remove/move can leave `reads` dangling or forward — a real, displayable state
+    // (surfaced red by validateSpec), same philosophy as dangling agent refs.
     removePhase: (index) =>
       set((s) => {
         if (s.spec.root.type !== 'sequence') return

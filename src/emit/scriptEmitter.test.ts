@@ -8,7 +8,31 @@ describe('emitScript — runtime-faithful contract', () => {
     const out = emitScript(codeReviewLoop)
     expect(out).toContain('export const meta = {')
     expect(out).toContain('name: "code-review-loop"')
-    expect(out).toContain('{ title: "Phase 1", detail: "step — reviewer → claude-opus-4-8" }')
+    expect(out).toContain(
+      '{ title: "Phase 1", detail: "step — reviewer → claude-opus-4-8 · yields {context, items}" }',
+    )
+    expect(out).toContain(
+      '{ title: "Phase 2", detail: "fan-out — investigator → claude-sonnet-4-6 (dynamic-N, cap 8) · reads reviewer" }',
+    )
+  })
+
+  it('schema-forces a producer feeding a fan-out and maps its exact items', () => {
+    const out = emitScript(codeReviewLoop)
+    // reviewer (phase 1) feeds the fan-out → forced { context, items }
+    expect(out).toContain('{ model: "claude-opus-4-8", label: "reviewer", schema: FANOUT_SCHEMA }')
+    expect(out).toContain('const FANOUT_SCHEMA = {')
+    // the fan-out consumes the exact array — no heuristic
+    expect(out).toContain('p1.items.slice(0, 8)')
+    expect(out).not.toContain('function toItems')
+  })
+
+  it('splices reads as labeled memory blocks (context of a forced producer)', () => {
+    const out = emitScript(codeReviewLoop)
+    // fan-out workers read the reviewer's shared context, then get their item
+    expect(out).toContain('"\\n\\n[reviewer]\\n" + asText(p1.context)')
+    expect(out).toContain('"\\n\\nYour assigned item:\\n" + asText(item)')
+    // synthesizer reads the fan-out's full output array
+    expect(out).toContain('"\\n\\n[investigator]\\n" + asText(p2)')
   })
 
   it('routes each stage to its resolved model via agent({ model })', () => {
@@ -65,7 +89,7 @@ describe('emitScript — runtime-faithful contract', () => {
     expect(out).toContain('detail: "loop — writer → claude-opus-4-8 (until done, ≤ 5)"')
   })
 
-  it('defines asText when a later step forward-passes (regression: helpers gated only on fanout)', () => {
+  it('splices a read as a labeled memory block (and defines asText for it)', () => {
     const spec: WorkflowSpec = {
       name: 'two-step',
       caps: { concurrency: 4, total: 100 },
@@ -76,15 +100,67 @@ describe('emitScript — runtime-faithful contract', () => {
       root: {
         type: 'sequence',
         steps: [
-          { type: 'agent', agent: 'a' },
-          { type: 'agent', agent: 'b' },
+          { type: 'agent', agent: 'a', id: 'n1' },
+          { type: 'agent', agent: 'b', id: 'n2', reads: ['n1'] },
         ],
       },
     }
     const out = emitScript(spec)
-    expect(out).toContain('asText(p1)') // step 2 forward-passes step 1
-    expect(out).toContain('function asText(x)') // …and the helper is defined
+    expect(out).toContain('"do b" + "\\n\\n[a]\\n" + asText(p1)')
+    expect(out).toContain('function asText(x)')
     expect(out).not.toContain('function toItems') // no fanout → no toItems
+  })
+
+  it('splices NOTHING when reads are empty — context never flows implicitly', () => {
+    const spec: WorkflowSpec = {
+      name: 'two-step',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'a', name: 'a', model: 'inherit', prompt: 'do a' },
+        { id: 'b', name: 'b', model: 'inherit', prompt: 'do b' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'a', id: 'n1' },
+          { type: 'agent', agent: 'b', id: 'n2' },
+        ],
+      },
+    }
+    const out = emitScript(spec)
+    expect(out).not.toContain('asText(')
+    expect(out).toContain('"do b",')
+  })
+
+  it('fails loud on a read that does not resolve to an earlier phase', () => {
+    const spec: WorkflowSpec = {
+      name: 'bad-read',
+      caps: { concurrency: 4, total: 100 },
+      agents: [{ id: 'a', name: 'a', model: 'inherit', prompt: 'do a' }],
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'agent', agent: 'a', id: 'n1', reads: ['ghost'] }],
+      },
+    }
+    expect(emitScript(spec)).toContain('throw new Error("Unresolved read \\"ghost\\"')
+  })
+
+  it('feeds a fan-out from a fan-out directly (already an array — no schema, no heuristic)', () => {
+    const spec: WorkflowSpec = {
+      name: 'ff',
+      caps: { concurrency: 4, total: 100 },
+      agents: [{ id: 'a', name: 'a', model: 'inherit', prompt: 'work' }],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'fanout', agent: 'a', cap: 4, id: 'n1' },
+          { type: 'fanout', agent: 'a', cap: 4, id: 'n2' },
+        ],
+      },
+    }
+    const out = emitScript(spec)
+    expect(out).toContain('p1.slice(0, 4)')
+    expect(out).not.toContain('schema: FANOUT_SCHEMA')
   })
 
   it('omits helpers entirely for a single step (nothing to forward-pass)', () => {
@@ -165,7 +241,10 @@ describe('emitScript — runtime-faithful contract', () => {
     }
     const out = emitScript(spec)
     expect(out).toContain('const p1_lead = await agent(')
-    expect(out).toContain('toItems(p1_lead).slice(0, 4)')
+    // the lead is schema-forced; grantees work the exact item list + the lead's context
+    expect(out).toContain('label: "lead", schema: FANOUT_SCHEMA')
+    expect(out).toContain('p1_lead.items.slice(0, 4)')
+    expect(out).toContain('"\\n\\n[lead context]\\n" + p1_lead.context')
     expect(out).toContain('detail: "step — lead → claude-opus-4-8 (delegates ≤ 4 to inv → claude-sonnet-4-6)"')
   })
 
@@ -178,47 +257,44 @@ describe('emitScript — runtime-faithful contract', () => {
       "// Dynamic workflow — generated by Prewire (one-way export; edit the spec, not this file).
       // Target: claude-code dynamic-workflow runtime · probed 2026-07-02
       // Caps — concurrency 8, total 1000 (fan-out counts are capped in-script; concurrency is the runtime's global cap).
+      // Context flow is explicit: each agent receives ONLY the [memory] blocks its phase reads (plus its pattern's own piping).
 
       export const meta = {
         name: "code-review-loop",
         description: "code-review-loop",
         phases: [
-          { title: "Phase 1", detail: "step — reviewer → claude-opus-4-8" },
-          { title: "Phase 2", detail: "fan-out — investigator → claude-sonnet-4-6 (dynamic-N, cap 8)" },
-          { title: "Phase 3", detail: "step — synthesizer → claude-haiku-4-5" },
+          { title: "Phase 1", detail: "step — reviewer → claude-opus-4-8 · yields {context, items}" },
+          { title: "Phase 2", detail: "fan-out — investigator → claude-sonnet-4-6 (dynamic-N, cap 8) · reads reviewer" },
+          { title: "Phase 3", detail: "step — synthesizer → claude-haiku-4-5 · reads investigator" },
         ],
       }
 
       // --- generated helpers ---
-      // Coerce a prior phase result into a list of items to fan out over. Best-effort:
-      // arrays pass through; {items|findings} arrays are unwrapped; a string is split on blank
-      // lines / list markers, falling back to single newlines. This is a HEURISTIC — for a
-      // strict N, give the producing agent an output schema so it returns a real array.
-      function toItems(x) {
-        if (Array.isArray(x)) return x
-        if (x && Array.isArray(x.items)) return x.items
-        if (x && Array.isArray(x.findings)) return x.findings
-        if (x == null) return []
-        const s = String(x).trim()
-        let parts = s.split(/\\n{2,}|\\n(?=\\s*[-*\\d])/).map((p) => p.trim()).filter(Boolean)
-        if (parts.length <= 1) parts = s.split(/\\n+/).map((p) => p.trim()).filter(Boolean)
-        return parts
-      }
       function asText(x) {
         return typeof x === "string" ? x : JSON.stringify(x, null, 2)
+      }
+      // A producer that feeds a fan-out returns shared context + the exact item list
+      // (runtime-enforced): downstream readers get \`context\`, the fan-out maps \`items\`.
+      const FANOUT_SCHEMA = {
+        type: "object",
+        properties: {
+          context: { type: "string", description: "shared context every downstream reader needs (setting, constraints, decisions)" },
+          items: { type: "array", items: { type: "string" }, description: "the list to fan out over — one self-contained work item per element" },
+        },
+        required: ["context", "items"],
       }
 
       phase("Phase 1")
       const p1 = await agent(
         "Review the diff on the current branch for correctness bugs and security issues. Group findings by severity and output one finding per item.",
-        { model: "claude-opus-4-8", label: "reviewer" },
+        { model: "claude-opus-4-8", label: "reviewer", schema: FANOUT_SCHEMA },
       )
 
       phase("Phase 2")
       const p2 = (await parallel(
-        toItems(p1).slice(0, 8).map((item) => () =>
+        p1.items.slice(0, 8).map((item) => () =>
           agent(
-            "Given a single finding, reproduce it, trace the root cause, and propose the minimal fix." + "\\n\\nInput:\\n" + asText(item),
+            "Given a single finding, reproduce it, trace the root cause, and propose the minimal fix." + "\\n\\n[reviewer]\\n" + asText(p1.context) + "\\n\\nYour assigned item:\\n" + asText(item),
             { model: "claude-sonnet-4-6", label: "investigator" },
           ),
         ),
@@ -226,7 +302,7 @@ describe('emitScript — runtime-faithful contract', () => {
 
       phase("Phase 3")
       const p3 = await agent(
-        "Merge all investigation reports into one ranked review summary with clear next actions." + "\\n\\nInput from the previous phase:\\n" + asText(p2),
+        "Merge all investigation reports into one ranked review summary with clear next actions." + "\\n\\n[investigator]\\n" + asText(p2),
         { model: "claude-haiku-4-5", label: "synthesizer" },
       )
 

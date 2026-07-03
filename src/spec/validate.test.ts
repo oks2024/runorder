@@ -82,4 +82,87 @@ describe('validateSpec', () => {
     }
     expect(validateSpec(spec)).toEqual({ ok: true })
   })
+
+  it('flags a read that resolves to nothing', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'reviewer', id: 'n1' },
+          { type: 'agent', agent: 'synthesizer', id: 'n2', reads: ['nope'] },
+        ],
+      },
+    }
+    const result = validateSpec(spec)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.issues[0]).toMatchObject({ code: 'dangling-read', ref: 'nope' })
+  })
+
+  it('flags a forward read (a memory only exists once its phase has run)', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'reviewer', id: 'n1', reads: ['n2'] },
+          { type: 'agent', agent: 'synthesizer', id: 'n2' },
+        ],
+      },
+    }
+    const result = validateSpec(spec)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.issues[0]).toMatchObject({ code: 'dangling-read', ref: 'n2' })
+  })
+
+  it('flags a self-read', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'agent', agent: 'reviewer', id: 'n1', reads: ['n1'] }],
+      },
+    }
+    const result = validateSpec(spec)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.issues[0]).toMatchObject({ code: 'dangling-read', ref: 'n1' })
+  })
+
+  it('flags duplicate node ids once', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'reviewer', id: 'dup' },
+          { type: 'agent', agent: 'investigator', id: 'dup' },
+          { type: 'agent', agent: 'synthesizer', id: 'dup' },
+        ],
+      },
+    }
+    const result = validateSpec(spec)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      const dupes = result.issues.filter((i) => i.code === 'duplicate-node-id')
+      expect(dupes).toHaveLength(1)
+      expect(dupes[0].ref).toBe('dup')
+    }
+  })
+
+  it('accepts valid backward reads (the seed reads chain)', () => {
+    // codeReviewLoop already wires reads; `ok: true` in the first test covers it. This
+    // covers a multi-target read reaching further back than the previous phase.
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'reviewer', id: 'n1' },
+          { type: 'agent', agent: 'investigator', id: 'n2', reads: ['n1'] },
+          { type: 'agent', agent: 'synthesizer', id: 'n3', reads: ['n1', 'n2'] },
+        ],
+      },
+    }
+    expect(validateSpec(spec)).toEqual({ ok: true })
+  })
 })

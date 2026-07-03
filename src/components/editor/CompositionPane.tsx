@@ -1,6 +1,7 @@
 import { useWorkflowStore } from '@/store/workflowStore'
 import { Pane } from './Pane'
 import { PhaseRow } from './PhaseRow'
+import { PATTERN_INFO, type PatternKey } from './patternInfo'
 
 /** The center pane: a flat ordered phase list over `root.steps` (V1 exposes one level). */
 export function CompositionPane() {
@@ -30,12 +31,13 @@ export function CompositionPane() {
       }
     >
       <div className="mb-3 rounded-lg border border-line-soft bg-well px-2.5 py-2 font-mono text-[10.5px] leading-relaxed text-ink-faint">
-        Ordered phases run top → down. Data flow is <b className="font-semibold text-ink-dim">implicit</b>:
-        each phase passes its results forward. A{' '}
-        <b className="font-semibold text-ink-dim">fan-out</b> maps the prior phase's output over one
-        agent (dynamic count, bounded by its cap). A{' '}
-        <b className="font-semibold text-ink-dim">loop</b> repeats one agent until it reports done
-        (bounded by max iterations).
+        Ordered phases run top → down. Context flow is{' '}
+        <b className="font-semibold text-ink-dim">explicit</b>: every phase's output is a named
+        memory, and each phase receives exactly what its{' '}
+        <b className="font-semibold text-ink-dim">reads</b> list — nothing flows implicitly. A{' '}
+        <b className="font-semibold text-ink-dim">fan-out</b> additionally hands each worker one
+        item; its producer (marked <b className="font-semibold text-ink-dim">items[]</b>) is
+        schema-forced to return {'{ context, items }'}, so the item count is exact.
       </div>
 
       {phases.map((node, i) => (
@@ -56,31 +58,31 @@ export function CompositionPane() {
       ))}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="grow basis-[30%] rounded-[9px] border border-dashed border-line py-2 text-center font-mono text-xs text-ink-faint hover:border-ink-faint hover:text-ink-dim focus-visible:outline-2 focus-visible:outline-focus"
-          onClick={() => addStep()}
-        >
-          + Step
-        </button>
-        <button type="button" className={addBtn} onClick={() => addFanout()}>
-          + Fan-out
-        </button>
-        <button type="button" className={addBtn} onClick={() => addLoop()}>
-          + Loop
-        </button>
-        <button type="button" className={addBtn} onClick={() => addMapReduce()}>
-          + Map-reduce
-        </button>
-        <button type="button" className={addBtn} onClick={() => addAdversarial()}>
-          + Adversarial
-        </button>
-        <button type="button" className={addBtn} onClick={() => addMultiAngle()}>
-          + Multi-angle
-        </button>
-        <button type="button" className={addBtn} onClick={() => addDelegate()}>
-          + Delegate
-        </button>
+        {(
+          [
+            ['step', () => addStep()],
+            ['fanout', () => addFanout()],
+            ['loop', () => addLoop()],
+            ['mapReduce', () => addMapReduce()],
+            ['adversarial', () => addAdversarial()],
+            ['multiAngle', () => addMultiAngle()],
+            ['delegate', () => addDelegate()],
+          ] as [PatternKey, () => void][]
+        ).map(([key, add]) => (
+          <button
+            key={key}
+            type="button"
+            className={
+              key === 'step'
+                ? 'grow basis-[30%] rounded-[9px] border border-dashed border-line py-2 text-center font-mono text-xs text-ink-faint hover:border-ink-faint hover:text-ink-dim focus-visible:outline-2 focus-visible:outline-focus'
+                : addBtn
+            }
+            title={PATTERN_INFO[key].tip}
+            onClick={add}
+          >
+            {PATTERN_INFO[key].button}
+          </button>
+        ))}
       </div>
     </Pane>
   )

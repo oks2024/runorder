@@ -44,6 +44,11 @@ export function TopBar() {
             : 'border-danger/40 bg-danger/10 text-danger',
         )}
         aria-live="polite"
+        title={
+          result.ok
+            ? 'Continuous validation: every agent ref resolves, no delegation cycles, all reads point at earlier phases.'
+            : result.issues.map((i) => i.message).join('\n')
+        }
       >
         <span
           className={cn(
