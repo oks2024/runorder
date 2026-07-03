@@ -1,7 +1,7 @@
-import { EditorLayout } from '@/components/editor/EditorLayout'
+import { StudioApp } from '@/components/studio/StudioApp'
 
 function App() {
-  return <EditorLayout />
+  return <StudioApp />
 }
 
 export default App
