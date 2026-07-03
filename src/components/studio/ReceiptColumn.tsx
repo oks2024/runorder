@@ -71,8 +71,7 @@ function ScriptLine({ line, no, hue }: { line: EmitLine; no: number; hue?: strin
  * The receipt column (mockup `.script`): a togglable pane showing the live emitted artifact —
  * Script (runtime-valid `.js`, per-line two-way provenance) or Prompt (structured-Markdown
  * fallback, a plain `<pre>` — no provenance hover, per the M4 scope: the prompt path isn't the
- * enforced one). Width animates to zero when closed. The "runtime-tagged" stamp marks the
- * script as version-pinned.
+ * enforced one). Width animates to zero when closed.
  */
 export function ReceiptColumn() {
   const spec = useWorkflowStore((s) => s.spec)
@@ -94,14 +93,6 @@ export function ReceiptColumn() {
         <div className="flex items-baseline gap-2.5 px-5 pt-4 pb-2.5">
           <span className="font-mono text-[10px] tracking-[0.16em] text-ink-dim uppercase">
             The receipt — what will run
-          </span>
-          <span
-            className="ml-auto rounded-[4px] px-1.5 font-mono text-[8.5px] tracking-[0.14em] text-enforced uppercase [rotate:-2deg]"
-            style={{
-              border: '1.5px solid color-mix(in oklch, var(--color-enforced) 45%, var(--color-rule))',
-            }}
-          >
-            runtime-tagged
           </span>
         </div>
 
