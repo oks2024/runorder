@@ -6,6 +6,7 @@ import { emitScript } from '@/emit/scriptEmitter'
 import { emitPrompt } from '@/emit/promptEmitter'
 import { useCopy } from '@/lib/useCopy'
 import { cn } from '@/lib/utils'
+import { LibraryMenu } from './LibraryMenu'
 
 /**
  * The Studio top bar (mockup `.top`): doc label + workflow name (display), the
@@ -96,6 +97,8 @@ export function TopBar() {
           ? `valid · est ≤ ${estimateRunSize(spec)} agents`
           : `${issueCount} issue${issueCount === 1 ? '' : 's'}`}
       </span>
+
+      <LibraryMenu />
 
       <button
         type="button"

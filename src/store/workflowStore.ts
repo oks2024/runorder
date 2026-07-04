@@ -14,12 +14,14 @@
  * `root.steps`; they no-op if the invariant is ever broken.
  */
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
 import { INHERIT } from '@/lib/models'
 import { referencedAgentIds } from '@/lib/nodeRoles'
 import { schemaForcible } from '@/emit/plumbing'
 import type { PatternKey } from '@/lib/patterns'
 import { codeReviewLoop } from '@/spec/seed'
+import { workflowSpecSchema } from '@/spec/schema'
 import type { Agent, PatternNode, WorkflowSpec } from '@/spec/schema'
 
 const CONCURRENCY_MAX = 16
@@ -217,8 +219,20 @@ function clone(spec: WorkflowSpec): WorkflowSpec {
   return structuredClone(spec)
 }
 
+/**
+ * Adopt a persisted `spec` only if it still parses against the current schema; a corrupt or
+ * schema-stale blob falls back to the seed so a bad localStorage payload never bricks the app.
+ * Only `spec` is persisted (actions aren't serializable), so we splice it into the live state.
+ */
+function mergePersisted(persisted: unknown, current: WorkflowState): WorkflowState {
+  const spec = (persisted as { spec?: unknown } | undefined)?.spec
+  const parsed = workflowSpecSchema.safeParse(spec)
+  return parsed.success ? { ...current, spec: parsed.data } : current
+}
+
 export const useWorkflowStore = create<WorkflowState>()(
-  immer((set) => ({
+  persist(
+    immer((set) => ({
     spec: clone(codeReviewLoop),
 
     setName: (name) =>
@@ -388,5 +402,12 @@ export const useWorkflowStore = create<WorkflowState>()(
       set((s) => {
         s.spec = clone(spec ?? codeReviewLoop)
       }),
-  })),
+    })),
+    {
+      name: 'prewire.live',
+      version: 1,
+      partialize: (s) => ({ spec: s.spec }),
+      merge: mergePersisted,
+    },
+  ),
 )
