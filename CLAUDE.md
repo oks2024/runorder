@@ -86,6 +86,7 @@ Scaffolded 2026-06-17 (Vite `react-ts`). All commands verified working:
 - `src/test/setup.ts` — Vitest setup (jest-dom matchers + RTL cleanup); Vitest config lives in `vite.config.ts` (`environment: jsdom`, globals on).
 - Design tokens / Tailwind theme: `src/index.css` (Tailwind v4). The shadcn neutral theme stays in the `@theme inline` block; the Studio **light "paper"** palette (paper/rule/ink scale, model-family hues darkened for a light background, enforced/intended honesty colors, IBM Plex Sans + Mono) is a second `@theme` block exposed as utilities (`bg-paper`, `text-ink`, `text-opus`, …), mirroring the mockup-16 `:root`. No forced dark. shadcn uses **Base UI** (`@base-ui/react`), the successor to Radix; the model picker (`ModelToken`) is built on `@base-ui/react/combobox`.
 - **Validation is continuous:** the TopBar status pill is derived live from `validateSpec` every render — there is no separate "Validate" button (it would be a no-op).
+- **Git commits:** never add a `Co-Authored-By` trailer (or any other AI-attribution line) to commit messages.
 
 ## Non-negotiable guardrails (do not violate when implementing)
 
