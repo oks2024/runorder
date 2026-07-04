@@ -9,8 +9,10 @@
  * never drift between the two sides.
  */
 
-/** A per-node worksheet field. The `2`-suffixed variants are a pattern's secondary role
- *  (reduce / critic / vote / grantee); `grant-cap` is A+ delegation's cap. */
+/** A per-node worksheet field. The numbered variants are a pattern's non-primary roles —
+ *  `model2`/`prompt2` is the secondary (reduce / critic / judge / vote / grantee), and a
+ *  branches phase numbers each branch after the first (`prompt3`, `model3`, …); `grant-cap`
+ *  is A+ delegation's cap; `votes` is verify's per-item jury size. */
 export type ProvField =
   | 'model'
   | 'prompt'
@@ -18,10 +20,11 @@ export type ProvField =
   | 'cap'
   | 'iters'
   | 'angles'
+  | 'votes'
   | 'schema'
-  | 'model2'
-  | 'prompt2'
   | 'grant-cap'
+  | `model${number}`
+  | `prompt${number}`
 
 /** The workflow name (masthead). Spec-level, so it has no node id. */
 export const PROV_NAME = 'name'

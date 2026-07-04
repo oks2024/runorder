@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { useWorkflowStore } from '@/store/workflowStore'
-import { provKey } from '@/lib/prov'
+import { provKey, type ProvField } from '@/lib/prov'
 import { ProvSpan } from './ProvSpan'
 import type { Agent } from '@/spec/schema'
 
@@ -22,7 +22,7 @@ export function PromptBlock({
   agent: Agent
   role?: string
   nodeId?: string
-  field: 'prompt' | 'prompt2'
+  field: ProvField
 }) {
   const updateAgent = useWorkflowStore((s) => s.updateAgent)
   const ref = useRef<HTMLTextAreaElement>(null)

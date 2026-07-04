@@ -85,6 +85,26 @@ function renderPhase(spec: WorkflowSpec, node: PatternNode, index: number): stri
         `${label('adv')}${agentName(spec, node.producer)} produces, ` +
         `then ${agentName(spec, node.critic)} critiques it`
       )
+    case 'refine':
+      return (
+        `${label('refine')}${agentName(spec, node.producer)} drafts, ` +
+        `${agentName(spec, node.critic)} judges approve/reject with a critique; ` +
+        `revise against the critique until approved (≤ ${node.maxIter} rounds); ` +
+        `the phase output is the final draft`
+      )
+    case 'verify':
+      return (
+        `${label('verify')}${agentName(spec, node.skeptic)} casts ${node.votes} independent ` +
+        `refutation votes per item of the prior output (≤ ${node.cap} items); ` +
+        `keep ONLY items whose refutals are a strict minority — the phase output is the surviving items`
+      )
+    case 'branches': {
+      const names = node.branches.map((ref) => agentName(spec, ref))
+      return (
+        `${label('branch')}${names.join(', ')} run once each, IN PARALLEL, on the same reads; ` +
+        `keep every output separate and labeled with its agent's name — the phase output is that labeled set, in branch order`
+      )
+    }
     case 'multiAngle':
       return (
         `${label('multi')}${agentName(spec, node.agent)} from ${node.angles} angles, ` +

@@ -144,10 +144,80 @@ describe('workflowStore — insertPattern', () => {
   })
 
   it('builds every pattern schema-valid', () => {
-    ;(['step', 'fanout', 'loop', 'mapReduce', 'adversarial', 'multiAngle', 'delegate'] as const).forEach(
-      (k) => store.getState().insertPattern(k, steps().length),
-    )
+    ;(
+      [
+        'step',
+        'fanout',
+        'branches',
+        'loop',
+        'mapReduce',
+        'adversarial',
+        'refine',
+        'verify',
+        'multiAngle',
+        'delegate',
+      ] as const
+    ).forEach((k) => store.getState().insertPattern(k, steps().length))
     expect(workflowSpecSchema.safeParse(spec()).success).toBe(true)
+  })
+
+  it('builds refine and verify with their role agents and numeric defaults', () => {
+    store.getState().insertPattern('refine', steps().length)
+    const refine = steps()[steps().length - 1]
+    expect(refine).toMatchObject({
+      type: 'refine',
+      maxIter: 3,
+      producer: agentByName('drafter')!.id,
+      critic: agentByName('judge')!.id,
+    })
+
+    store.getState().insertPattern('verify', steps().length)
+    const verify = steps()[steps().length - 1]
+    expect(verify).toMatchObject({
+      type: 'verify',
+      votes: 3,
+      cap: 8, // defaults to the concurrency cap, like fan-out
+      skeptic: agentByName('skeptic')!.id,
+    })
+  })
+
+  it('builds branches with two fresh branch agents; addBranch/removeBranch keep 2..8', () => {
+    store.getState().insertPattern('branches', steps().length)
+    const idx = steps().length - 1
+    expect(steps()[idx]).toMatchObject({
+      type: 'branches',
+      branches: [agentByName('branch')!.id, agentByName('branch-2')!.id],
+    })
+
+    store.getState().addBranch(idx)
+    expect(agentByName('branch-3')).toBeDefined()
+    let node = steps()[idx]
+    expect(node.type === 'branches' && node.branches).toHaveLength(3)
+
+    // removing a branch GCs its now-unreferenced fresh agent
+    store.getState().removeBranch(idx, 1)
+    node = steps()[idx]
+    expect(node.type === 'branches' && node.branches).toHaveLength(2)
+    expect(agentByName('branch-2')).toBeUndefined()
+
+    // a branches phase keeps at least two branches
+    store.getState().removeBranch(idx, 0)
+    node = steps()[idx]
+    expect(node.type === 'branches' && node.branches).toHaveLength(2)
+
+    // and at most eight — extra addBranch calls are no-ops
+    for (let i = 0; i < 10; i++) store.getState().addBranch(idx)
+    node = steps()[idx]
+    expect(node.type === 'branches' && node.branches).toHaveLength(8)
+  })
+
+  it('setBranchAgent retargets one branch and GCs the orphaned fresh agent', () => {
+    store.getState().insertPattern('branches', steps().length)
+    const idx = steps().length - 1
+    store.getState().setBranchAgent(idx, 1, 'reviewer')
+    const node = steps()[idx]
+    expect(node.type === 'branches' && node.branches[1]).toBe('reviewer')
+    expect(agentByName('branch-2')).toBeUndefined()
   })
 
   describe('defaultReadsAt', () => {
@@ -300,6 +370,31 @@ describe('workflowStore — phase editing', () => {
       type: 'iterateUntil',
       body: { type: 'agent', agent: 'synthesizer' },
     })
+  })
+
+  it('clamps refine maxIter, verify votes, and verify cap on set', () => {
+    store.getState().insertPattern('refine', steps().length)
+    store.getState().insertPattern('verify', steps().length)
+    const [ri, vi] = [steps().length - 2, steps().length - 1]
+    store.getState().setRefineMaxIter(ri, 999)
+    store.getState().setVerifyVotes(vi, 999)
+    store.getState().setVerifyCap(vi, 0)
+    expect((steps()[ri] as { maxIter: number }).maxIter).toBe(10)
+    expect((steps()[vi] as { votes: number }).votes).toBe(8)
+    expect((steps()[vi] as { cap: number }).cap).toBe(1)
+  })
+
+  it('routes primary/secondary setters for refine and verify', () => {
+    store.getState().insertPattern('refine', steps().length)
+    const ri = steps().length - 1
+    store.getState().setPhaseAgent(ri, 'reviewer')
+    store.getState().setPhaseSecondaryAgent(ri, 'synthesizer')
+    expect(steps()[ri]).toMatchObject({ type: 'refine', producer: 'reviewer', critic: 'synthesizer' })
+
+    store.getState().insertPattern('verify', steps().length)
+    const vi = steps().length - 1
+    store.getState().setPhaseAgent(vi, 'investigator')
+    expect(steps()[vi]).toMatchObject({ type: 'verify', skeptic: 'investigator' })
   })
 
   it('clamps map cap, angles, and grant cap on set', () => {

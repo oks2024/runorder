@@ -9,7 +9,8 @@ import type { EditableNode } from './roles'
  * The mono flow-note under a phase (mockup `.flow-note`): the memories this phase reads (as
  * removable chips) plus a "+ read…" picker of earlier memories, then where its output goes —
  * a named memory, or "final output of the run" for the last phase. When the phase is
- * schema-forced (a fan-out consumes it), the honest `{ context, items }` note is appended.
+ * schema-forced (the next phase consumes it as items), the honest `{ context, items }` note
+ * is appended.
  * Reads/names are id-based and re-derived here, so the label matches what the script splices.
  */
 export function FlowNote({
@@ -108,8 +109,8 @@ export function FlowNote({
       )}
       {forced && (
         <ProvSpan keys={nodeId ? provKey(nodeId, 'schema') : undefined} className="-mx-1 px-1">
-          , schema-forced to <span className={mem}>{'{ context, items }'}</span> because a
-          fan-out consumes it
+          , schema-forced to <span className={mem}>{'{ context, items }'}</span> because the
+          next phase consumes it as items
         </ProvSpan>
       )}
     </p>

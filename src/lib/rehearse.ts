@@ -23,8 +23,8 @@
  * Nothing here reads the clock or randomness — same spec + N ⇒ same rehearsal.
  */
 import { INHERIT, resolveAlias } from '@/lib/models'
-import { deriveMemoryNames } from '@/lib/memoryNames'
-import { isSchemaForced } from '@/emit/plumbing'
+import { branchLabels, deriveMemoryNames } from '@/lib/memoryNames'
+import { isSchemaForced, yieldsItemArray } from '@/emit/plumbing'
 import type { PatternKey } from '@/lib/patterns'
 import type { PatternNode, WorkflowSpec } from '@/spec/schema'
 
@@ -50,11 +50,13 @@ export type InstanceRole =
   | 'reducer'
   | 'producer'
   | 'critic'
+  | 'skeptic'
   | 'take'
   | 'voter'
   | 'lead'
   | 'grantee'
   | 'loop-body'
+  | 'branch'
 
 export interface RehearsalInstance {
   /** Resolved agent name; a dangling ref becomes `«ref?»`. */
@@ -77,7 +79,7 @@ export interface RehearsalTick {
   nodeId?: string
   kind: PatternKey
   /** Sub-stage of a 2-tick phase. */
-  stage?: 'map' | 'reduce' | 'draft' | 'critique' | 'takes' | 'vote' | 'lead' | 'delegates'
+  stage?: 'map' | 'reduce' | 'draft' | 'critique' | 'judge' | 'takes' | 'vote' | 'lead' | 'delegates'
   /** Extra context (e.g. the loop's bounded/sequential caveat). */
   note?: string
   instances: RehearsalInstance[]
@@ -97,7 +99,7 @@ export interface RehearsalGap {
 export interface CapWarning {
   phaseIndex: number
   nodeId?: string
-  kind: 'fanout' | 'mapReduce' | 'delegate'
+  kind: 'fanout' | 'mapReduce' | 'delegate' | 'verify'
   cap: number
   incoming: number
   dropped: number
@@ -128,6 +130,10 @@ function outputAgentRef(node: PatternNode): string | null {
       return node.reduce
     case 'adversarial':
       return node.producer
+    case 'refine':
+      return node.producer
+    case 'verify':
+      return node.skeptic
     case 'multiAngle':
       return node.vote
     case 'iterateUntil':
@@ -141,6 +147,8 @@ function outputAgentRef(node: PatternNode): string | null {
 function isParallelTick(t: RehearsalTick): boolean {
   return (
     t.kind === 'fanout' ||
+    t.kind === 'verify' ||
+    t.kind === 'branches' ||
     (t.kind === 'mapReduce' && t.stage === 'map') ||
     (t.kind === 'multiAngle' && t.stage === 'takes') ||
     (t.kind === 'delegate' && t.stage === 'delegates')
@@ -163,6 +171,8 @@ function itemSeg(index: number, total: number, source: string): ReceiveSegment {
 
 const CONTEXT_ITEMS_SHAPE = '{ context, items } (runtime-enforced)'
 const LOOP_SHAPE = '{ done, output } (runtime-enforced)'
+const REFINE_SHAPE = '{ approved, critique } (runtime-enforced)'
+const VERDICT_SHAPE = '{ refuted, reason } (runtime-enforced)'
 const FREE_TEXT_SHAPE = 'free text'
 const FINAL_OUTPUT = 'final output of the run'
 
@@ -265,7 +275,23 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
       const at = byIndex.get(target)
       if (at === undefined || at >= index) continue // forward/dangling — surfaced elsewhere
       const name = memName(at)
-      const from = agentName(outputAgentRef(phases[at]))
+      const prev = phases[at]
+      if (prev.type === 'branches') {
+        // Mirrors the emitter: a branches memory splices one labeled block per branch.
+        const labels = branchLabels(spec, prev)
+        prev.branches.forEach((ref, k) => {
+          const from = agentName(ref)
+          out.push({
+            kind: 'read',
+            memoryName: labels[k],
+            fromAgent: from,
+            placeholder: readPlaceholder(from),
+            source: `spliced because this phase reads → ${name} (branch ${k + 1} of ${prev.branches.length})`,
+          })
+        })
+        continue
+      }
+      const from = agentName(outputAgentRef(prev))
       out.push({
         kind: 'read',
         memoryName: name,
@@ -293,11 +319,14 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
         describe: (k) => `from ${prevMem}.items[${k - 1}] — exact array, not a string split`,
       }
     }
-    if (prev.type === 'fanout' || (prev.type === 'agent' && !!prev.grants && prev.grants.length > 0)) {
+    if (yieldsItemArray(prev)) {
       const c = outCounts[index - 1]
       return {
         count: c,
-        describe: () => `from ${prevMem} — exact array of ${c} outputs (not a string split)`,
+        describe:
+          prev.type === 'verify'
+            ? () => `from ${prevMem} — the ≤${c} majority-gate survivors (exact array)`
+            : () => `from ${prevMem} — exact array of ${c} outputs (not a string split)`,
       }
     }
     return { count: n, describe: () => 'from a heuristic split of the previous output' }
@@ -553,6 +582,130 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
         break
       }
 
+      case 'refine': {
+        // Bounded revise loop: one drafter + one judge per round, sequential; the loop bound
+        // and early-stop live in the note (mirrors how `loop` counts its body once).
+        const note = `× up to ${node.maxIter} revisions, sequential — stops when approved`
+        pushTick({
+          label: nextLabel(),
+          phaseIndex: i,
+          nodeId,
+          kind: 'refine',
+          stage: 'draft',
+          note,
+          instances: [
+            buildInstance(spec, {
+              ref: node.producer,
+              role: 'producer',
+              reads,
+              extraSys: ['+ the judge’s critique on every revision after the first'],
+              shape: FREE_TEXT_SHAPE,
+              collectedInto: terminalCollect,
+            }),
+          ],
+        })
+        pushTick({
+          label: nextLabel(),
+          phaseIndex: i,
+          nodeId,
+          kind: 'refine',
+          stage: 'judge',
+          note,
+          instances: [
+            buildInstance(spec, {
+              ref: node.critic,
+              role: 'critic',
+              reads,
+              extraSys: ['+ the draft to judge'],
+              shape: REFINE_SHAPE,
+              collectedInto: `approve/reject — gates ${agentName(node.producer)}’s next revision`,
+            }),
+          ],
+        })
+        outCounts[i] = 1
+        lastTick[i] = ticks.length - 1
+        break
+      }
+
+      case 'verify': {
+        // Per-item refuter jury: `votes` independent skeptics per (capped) item; items beyond
+        // the cap are dropped in-script. Survivors are decided at run time by the majority
+        // gate, so downstream counts are upper bounds.
+        const src = itemSource(i)
+        const incoming = src.count
+        const cap = node.cap
+        const skeptics: RehearsalInstance[] = []
+        for (let k = 1; k <= incoming; k++) {
+          if (k > cap) {
+            // One dropped card per dropped ITEM (its whole jury never convenes).
+            skeptics.push(
+              buildInstance(spec, {
+                ref: node.skeptic,
+                role: 'skeptic',
+                n: k,
+                dropped: true,
+                seat: true,
+                seatCap: cap,
+                shape: VERDICT_SHAPE,
+                collectedInto: 'counted toward the majority gate',
+              }),
+            )
+            continue
+          }
+          for (let v = 1; v <= node.votes; v++) {
+            skeptics.push(
+              buildInstance(spec, {
+                ref: node.skeptic,
+                role: 'skeptic',
+                n: (k - 1) * node.votes + v,
+                seat: true,
+                reads,
+                item: itemSeg(k, incoming, src.describe(k)),
+                extraSys: [`vote ${v} of ${node.votes} on item ${k} — independent take`],
+                shape: VERDICT_SHAPE,
+                collectedInto: 'counted toward the majority gate',
+              }),
+            )
+          }
+        }
+        if (incoming > cap) {
+          capWarnings.push({ phaseIndex: i, nodeId, kind: 'verify', cap, incoming, dropped: incoming - cap })
+        }
+        pushTick({
+          label: nextLabel(),
+          phaseIndex: i,
+          nodeId,
+          kind: 'verify',
+          note: 'majority gate — survivors decided at run time',
+          instances: skeptics,
+        })
+        outCounts[i] = Math.min(incoming, cap) // upper bound: the gate can only shrink it
+        lastTick[i] = ticks.length - 1
+        break
+      }
+
+      case 'branches': {
+        // Heterogeneous parallel: every branch agent runs once, all at the same tick, each
+        // with the same reads. The memory is the branch-ordered array of their outputs.
+        const total = node.branches.length
+        const instances = node.branches.map((ref, k) =>
+          buildInstance(spec, {
+            ref,
+            role: 'branch',
+            n: k + 1,
+            seat: true, // parallel(), uncapped in-script (exactly one per branch) — concurrency-queued
+            reads,
+            extraSys: [`branch ${k + 1} of ${total} — its own task, same reads`],
+            shape: FREE_TEXT_SHAPE,
+            collectedInto: isLast ? FINAL_OUTPUT : `${mem}[${k}]`,
+          }),
+        )
+        pushTick({ label: nextLabel(), phaseIndex: i, nodeId, kind: 'branches', instances })
+        outCounts[i] = total
+        lastTick[i] = ticks.length - 1
+        break
+      }
+
       case 'multiAngle': {
         const takes: RehearsalInstance[] = []
         for (let k = 1; k <= node.angles; k++) {
@@ -609,6 +762,10 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
     let countLabel: string
     if (schemaForced[i]) {
       countLabel = `${mem}.items[] — ${n} items in this rehearsal`
+    } else if (node.type === 'verify') {
+      countLabel = `${mem} — ≤ ${outCounts[i]} survivors (majority gate)`
+    } else if (node.type === 'branches') {
+      countLabel = `${mem} — ${outCounts[i]} labeled outputs`
     } else if (node.type === 'fanout' || (node.type === 'agent' && !!node.grants && node.grants.length > 0)) {
       countLabel = `${mem} — ${outCounts[i]} outputs`
     } else {

@@ -79,6 +79,9 @@ export type PatternNode =
   | (NodeBase & { type: 'adversarial'; producer: AgentRef; critic: AgentRef })
   | (NodeBase & { type: 'multiAngle'; agent: AgentRef; angles: number; vote: AgentRef })
   | (NodeBase & { type: 'iterateUntil'; body: PatternNode; maxIter: number })
+  | (NodeBase & { type: 'refine'; producer: AgentRef; critic: AgentRef; maxIter: number }) // draft → judge → revise until approved
+  | (NodeBase & { type: 'verify'; skeptic: AgentRef; votes: number; cap: number }) // per-item refuter panel; majority gate filters the items
+  | (NodeBase & { type: 'branches'; branches: AgentRef[] }) // heterogeneous parallel: N distinct agents, each once, same reads
   | (NodeBase & { type: 'agent'; agent: AgentRef; grants?: Grant[] }) // A+ leaf (a single-agent step)
 
 const grantSchema: z.ZodType<Grant> = z.object({
@@ -126,6 +129,25 @@ export const patternNodeSchema: z.ZodType<PatternNode> = z.lazy(() =>
       type: z.literal('iterateUntil'),
       body: patternNodeSchema,
       maxIter: z.number().int().min(1),
+      ...nodeBaseShape,
+    }),
+    z.object({
+      type: z.literal('refine'),
+      producer: agentRefSchema,
+      critic: agentRefSchema,
+      maxIter: z.number().int().min(1),
+      ...nodeBaseShape,
+    }),
+    z.object({
+      type: z.literal('verify'),
+      skeptic: agentRefSchema,
+      votes: z.number().int().min(1),
+      cap: z.number().int().min(1).max(16),
+      ...nodeBaseShape,
+    }),
+    z.object({
+      type: z.literal('branches'),
+      branches: z.array(agentRefSchema).min(1),
       ...nodeBaseShape,
     }),
     z.object({

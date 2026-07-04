@@ -12,7 +12,8 @@ import type { PatternNode, WorkflowSpec } from '@/spec/schema'
 /**
  * The primary agent ref of a phase — the one that "leads" it:
  * step / fan-out / multi-angle → `agent`; loop → its body agent; map-reduce → `map.agent`;
- * adversarial → `producer`; delegate (agent + grants) → the lead `agent`.
+ * adversarial → `producer`; refine → `producer`; verify → `skeptic`; branches → the first
+ * branch; delegate (agent + grants) → the lead `agent`.
  * Returns null when unresolvable (a `sequence`, or a loop whose body is not a single agent).
  */
 export function primaryRef(node: PatternNode): string | null {
@@ -27,6 +28,12 @@ export function primaryRef(node: PatternNode): string | null {
       return node.map.agent
     case 'adversarial':
       return node.producer
+    case 'refine':
+      return node.producer
+    case 'verify':
+      return node.skeptic
+    case 'branches':
+      return node.branches[0] ?? null
     case 'iterateUntil':
       return node.body.type === 'agent' ? node.body.agent : null
     default:
@@ -36,14 +43,16 @@ export function primaryRef(node: PatternNode): string | null {
 
 /**
  * The secondary agent ref of a composite phase — map-reduce → `reduce`;
- * adversarial → `critic`; multi-angle → `vote`; delegate → first grant's agent.
- * Returns null for phases with no secondary role.
+ * adversarial → `critic`; refine → `critic`; multi-angle → `vote`; delegate → first grant's
+ * agent. Returns null for phases with no secondary role (verify has only its skeptic).
  */
 export function secondaryRef(node: PatternNode): string | null {
   switch (node.type) {
     case 'mapReduce':
       return node.reduce
     case 'adversarial':
+      return node.critic
+    case 'refine':
       return node.critic
     case 'multiAngle':
       return node.vote
@@ -87,6 +96,16 @@ export function referencedAgentIds(spec: WorkflowSpec): Set<string> {
       case 'adversarial':
         ids.add(node.producer)
         ids.add(node.critic)
+        return
+      case 'refine':
+        ids.add(node.producer)
+        ids.add(node.critic)
+        return
+      case 'verify':
+        ids.add(node.skeptic)
+        return
+      case 'branches':
+        node.branches.forEach((ref) => ids.add(ref))
         return
     }
   }

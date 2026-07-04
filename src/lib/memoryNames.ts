@@ -33,9 +33,18 @@ function outputAgentRef(node: PatternNode): string | null {
       return node.producer
     case 'multiAngle':
       return node.vote
+    case 'refine':
+      // The phase's memory is the accepted draft — the producer's output, not the verdict.
+      return node.producer
+    case 'verify':
+      // The memory is the surviving subset of the previous phase's items; naming it after
+      // the skeptic reads as "what survived <skeptic>" — the only agent this phase runs.
+      return node.skeptic
     case 'iterateUntil':
       return node.body.type === 'agent' ? node.body.agent : null
     default:
+      // `branches` has no single output agent — its name is derived in `deriveMemoryNames`
+      // from every branch (see `branchLabels`); `sequence` has no memory at all.
       return null
   }
 }
@@ -49,6 +58,21 @@ function slugify(name: string): string {
 }
 
 /**
+ * Per-branch splice labels for a `branches` phase, in branch (= output array) order — the
+ * `[label]` each branch's output wears when a later phase reads this memory. Shared by both
+ * emitters and the rehearsal view so the label the user sees is the label the script splices.
+ */
+export function branchLabels(
+  spec: WorkflowSpec,
+  node: Extract<PatternNode, { type: 'branches' }>,
+): string[] {
+  return node.branches.map((ref, k) => {
+    const agent = spec.agents.find((a) => a.id === ref)
+    return (agent && slugify(agent.name)) || `branch-${k + 1}`
+  })
+}
+
+/**
  * One entry per root step, in phase order. Names are unique: repeats get `-2`, `-3`, …
  * A dangling/unnamed output agent falls back to `phase-N`.
  */
@@ -59,7 +83,9 @@ export function deriveMemoryNames(spec: WorkflowSpec): MemoryEntry[] {
   return steps.map((node, i) => {
     const ref = outputAgentRef(node)
     const agent = ref ? spec.agents.find((a) => a.id === ref) : null
-    const base = (agent && slugify(agent.name)) || `phase-${i + 1}`
+    // A branches phase's memory holds every branch's output, so its name is all of them.
+    const joined = node.type === 'branches' ? branchLabels(spec, node).join('+') : ''
+    const base = joined || (agent && slugify(agent.name)) || `phase-${i + 1}`
     const count = (used.get(base) ?? 0) + 1
     used.set(base, count)
     const name = count === 1 ? base : `${base}-${count}`

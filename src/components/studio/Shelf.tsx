@@ -2,10 +2,10 @@ import { PATTERN_ORDER } from '@/lib/patterns'
 import { PatternCard } from './PatternCard'
 
 /**
- * The pattern playbook (mockup `.shelf`): a fixed-width left sidebar listing the seven
- * run-proven topologies as draggable cards. Hidden below ~980px (mockup `@media (max-width:
- * 980px) { .shelf { display: none } }`) — a narrow viewport just loses the shelf; each card's
- * click-to-append fallback only helps once the shelf itself is visible.
+ * The pattern playbook (mockup `.shelf`): a fixed-width left sidebar listing the topologies
+ * as draggable cards, each carrying its own honest proof chip. Hidden below ~980px (mockup
+ * `@media (max-width: 980px) { .shelf { display: none } }`) — a narrow viewport just loses
+ * the shelf; each card's click-to-append fallback only helps once the shelf itself is visible.
  */
 export function Shelf() {
   return (
@@ -17,7 +17,8 @@ export function Shelf() {
         Playbook
       </div>
       <p className="mx-1 mb-3.5 text-[11px] leading-[1.45] text-ink-faint">
-        Seven run-proven shapes. Drag one into the worksheet — its handoffs arrive pre-wired.
+        Nine shapes, each marked with its proof status. Drag one into the worksheet — its
+        handoffs arrive pre-wired.
       </p>
       {PATTERN_ORDER.map((kind) => (
         <PatternCard key={kind} kind={kind} />

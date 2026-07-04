@@ -43,6 +43,41 @@ describe('validateSpec', () => {
     if (!result.ok) expect(result.issues).toHaveLength(1)
   })
 
+  it('flags a dangling ref inside a branches node', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'branches', branches: ['reviewer', 'ghost-branch'] }],
+      },
+    }
+    const result = validateSpec(spec)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.issues).toHaveLength(1)
+      expect(result.issues[0]).toMatchObject({ code: 'dangling-ref', ref: 'ghost-branch' })
+    }
+  })
+
+  it('flags dangling refs inside refine and verify nodes', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'refine', producer: 'reviewer', critic: 'ghost-judge', maxIter: 3 },
+          { type: 'verify', skeptic: 'ghost-skeptic', votes: 3, cap: 4 },
+        ],
+      },
+    }
+    const result = validateSpec(spec)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.issues.map((i) => i.ref).sort()).toEqual(['ghost-judge', 'ghost-skeptic'])
+      expect(result.issues.every((i) => i.code === 'dangling-ref')).toBe(true)
+    }
+  })
+
   it('flags a self-grant delegation cycle', () => {
     const spec: WorkflowSpec = {
       ...codeReviewLoop,

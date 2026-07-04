@@ -29,9 +29,9 @@
  *     silently-skipped stage.
  */
 import { INHERIT, resolveAlias } from '@/lib/models'
-import { deriveMemoryNames } from '@/lib/memoryNames'
+import { branchLabels, deriveMemoryNames } from '@/lib/memoryNames'
 import { PROV_CAPS, PROV_NAME, provKey, type ProvField } from '@/lib/prov'
-import { isSchemaForced } from './plumbing'
+import { isSchemaForced, yieldsItemArray } from './plumbing'
 import type { PatternNode, WorkflowSpec } from '@/spec/schema'
 
 /** Runtime release this emitter was validated against. Static so output stays deterministic. */
@@ -127,8 +127,11 @@ function memoryExpr(info: PhaseInfo): string {
 /**
  * The prompt-suffix expression splicing this node's reads as labeled memory blocks, or the
  * offending id when a read can't resolve to an earlier phase (emitted as a loud throw).
+ * A branches memory is spliced as one labeled block PER BRANCH (branch order = array order),
+ * so the reader sees which sibling produced what — never an unlabeled JSON array.
  */
 function readsSuffix(
+  spec: WorkflowSpec,
   node: PatternNode,
   index: number,
   infos: PhaseInfo[],
@@ -140,23 +143,27 @@ function readsSuffix(
     const at = byId.get(target)
     if (at === undefined || at >= index) return { badRead: target }
     const info = infos[at]
+    if (info.node.type === 'branches') {
+      branchLabels(spec, info.node).forEach((label, k) => {
+        suffix += ` + ${js(`\n\n[${label}]\n`)} + asText(${info.outVar}[${k}])`
+      })
+      continue
+    }
     suffix += ` + ${js(`\n\n[${info.memoryName}]\n`)} + asText(${memoryExpr(info)})`
   }
   return { suffix }
 }
 
 /**
- * The items expression a fan-out/map at `index` iterates. Exact when the previous phase is
- * schema-forced (`.items`) or already an array (fan-out / delegation output); heuristic
- * `toItems` otherwise (workflow args, loop/adversarial outputs).
+ * The items expression a fan-out/map/verify at `index` iterates. Exact when the previous
+ * phase is schema-forced (`.items`) or already an array (fan-out / delegation / verify
+ * output); heuristic `toItems` otherwise (workflow args, loop/adversarial outputs).
  */
 function itemsExpr(index: number, infos: PhaseInfo[]): string {
   if (index === 0) return 'toItems(args)'
   const prev = infos[index - 1]
   if (prev.schemaForced) return `${prev.outVar}.items`
-  const pn = prev.node
-  if (pn.type === 'fanout' || (pn.type === 'agent' && !!pn.grants && pn.grants.length > 0))
-    return prev.outVar
+  if (yieldsItemArray(prev.node)) return prev.outVar
   return `toItems(${prev.outVar})`
 }
 
@@ -199,7 +206,7 @@ function renderPhase(
     outVar,
   })
 
-  const r = readsSuffix(node, index, infos, byId)
+  const r = readsSuffix(spec, node, index, infos, byId)
   if ('badRead' in r) {
     return {
       lines: [
@@ -396,6 +403,103 @@ function renderPhase(
         outVar,
       }
     }
+    case 'refine': {
+      // Bounded revise loop: draft → judge ({approved, critique}, runtime-enforced) →
+      // revise against the critique, stopping early on approval. The phase's memory is the
+      // last draft — the critique is *acted on*, not carried downstream.
+      const producer = findAgent(spec, node.producer)
+      if (!producer) return danglingAgent(node.producer)
+      const critic = findAgent(spec, node.critic)
+      if (!critic) return danglingAgent(node.critic)
+      return {
+        lines: [
+          phaseHead,
+          P(`let ${outVar} = ""`),
+          P(`let ${outVar}_note = ""`),
+          P(`for (let i = 0; i < ${node.maxIter}; i++) {`, tag('iters')),
+          P(`  const draft = await agent(`),
+          P(
+            `    ${js(producer.prompt)}${reads} + "\\n\\nRevision " + (i + 1) + " of ${node.maxIter}." + (i === 0 ? "" : "\\n\\nYour previous draft:\\n" + asText(${outVar}) + "\\n\\nCritique to address:\\n" + asText(${outVar}_note)),`,
+            tag('prompt', hasReads && 'reads'),
+          ),
+          P(`    ${agentOpts(producer.model, producer.name)},`, tag('model')),
+          P(`  )`),
+          P(`  if (draft == null) break`),
+          P(`  ${outVar} = draft`),
+          P(`  const verdict = await agent(`),
+          P(
+            `    ${js(critic.prompt)}${reads} + "\\n\\nDraft to judge:\\n" + asText(${outVar}),`,
+            tag('prompt2', hasReads && 'reads'),
+          ),
+          P(`    ${agentOpts(critic.model, critic.name, ['schema: REFINE_SCHEMA'])},`, tag('model2')),
+          P(`  )`),
+          P(`  if (verdict == null || verdict.approved) break`),
+          P(`  ${outVar}_note = verdict.critique`),
+          P(`}`),
+        ],
+        outVar,
+      }
+    }
+    case 'verify': {
+      // Per-item refuter jury: every (capped) item gets `votes` independent skeptics, each
+      // runtime-enforced to {refuted, reason}; a deterministic in-script majority gate then
+      // keeps only items whose refutals are a strict minority. Memory = the survivors.
+      const skeptic = findAgent(spec, node.skeptic)
+      if (!skeptic) return danglingAgent(node.skeptic)
+      const voteLabel = `${js(skeptic.name + ' (vote ')} + (k + 1) + ${js(')')}`
+      return {
+        lines: [
+          phaseHead,
+          P(`const ${outVar}_pool = ${itemsExpr(index, infos)}.slice(0, ${node.cap})`, tag('cap')),
+          P(`const ${outVar}_verdicts = await parallel(`),
+          P(`  ${outVar}_pool.map((item) => () =>`),
+          P(`    parallel(`),
+          P(`      Array.from({ length: ${node.votes} }, (_, k) => () =>`, tag('votes')),
+          P(`        agent(`),
+          P(
+            `          ${js(skeptic.prompt)}${reads} + "\\n\\nVote " + (k + 1) + " of ${node.votes} — independent take. Item to refute:\\n" + asText(item),`,
+            tag('prompt', hasReads && 'reads'),
+          ),
+          P(
+            `          ${optsExprDynamicLabel(skeptic.model, voteLabel, ['schema: VERDICT_SCHEMA'])},`,
+            tag('model'),
+          ),
+          P(`        ),`),
+          P(`      ),`),
+          P(`    ),`),
+          P(`  ),`),
+          P(`)`),
+          P(`// Majority gate (deterministic, in-script): keep an item only when its refutals are a strict minority of the votes returned.`),
+          P(`const ${outVar} = ${outVar}_pool.filter((item, i) => {`),
+          P(`  const vs = (${outVar}_verdicts[i] || []).filter(Boolean)`),
+          P(`  return vs.filter((v) => v.refuted).length * 2 < vs.length`),
+          P(`})`),
+        ],
+        outVar,
+      }
+    }
+    case 'branches': {
+      // Heterogeneous parallel: every branch agent runs ONCE, all at the same time, each
+      // receiving the same reads plus its own prompt. The result array is NOT filtered —
+      // it stays aligned with the branch order so readers can splice `[label] + p[k]`
+      // blocks by index (a failed branch shows up loud as null, never shifts its siblings).
+      const agents = node.branches.map((ref) => findAgent(spec, ref))
+      const missing = agents.findIndex((a) => !a)
+      if (missing >= 0) return danglingAgent(node.branches[missing])
+      const lines: EmitLine[] = [phaseHead, P(`const ${outVar} = await parallel([`)]
+      agents.forEach((agent, k) => {
+        const promptField: ProvField = k === 0 ? 'prompt' : `prompt${k + 1}`
+        const modelField: ProvField = k === 0 ? 'model' : `model${k + 1}`
+        lines.push(
+          P(`  () => agent(`),
+          P(`    ${js(agent!.prompt)}${reads},`, tag(promptField, hasReads && 'reads')),
+          P(`    ${agentOpts(agent!.model, agent!.name)},`, tag(modelField)),
+          P(`  ),`),
+        )
+      })
+      lines.push(P(`])`))
+      return { lines, outVar }
+    }
     case 'multiAngle': {
       const worker = findAgent(spec, node.agent)
       if (!worker) return danglingAgent(node.agent)
@@ -451,6 +555,8 @@ function helpers(need: {
   asText: boolean
   loopSchema: boolean
   fanoutSchema: boolean
+  refineSchema: boolean
+  verdictSchema: boolean
 }): EmitLine[] {
   const out: string[] = ['// --- generated helpers ---']
   if (need.toItems) {
@@ -502,6 +608,33 @@ function helpers(need: {
       '    output: { type: "string", description: "current result / working state to carry forward" },',
       '  },',
       '  required: ["done", "output"],',
+      '}',
+    )
+  }
+  if (need.refineSchema) {
+    out.push(
+      '// A refine judge approves the draft or returns the critique the next revision must address.',
+      'const REFINE_SCHEMA = {',
+      '  type: "object",',
+      '  properties: {',
+      '    approved: { type: "boolean", description: "true when the draft passes as-is; stops the revision loop" },',
+      '    critique: { type: "string", description: "actionable critique the producer must address in its next revision (empty when approved)" },',
+      '  },',
+      '  required: ["approved", "critique"],',
+      '}',
+    )
+  }
+  if (need.verdictSchema) {
+    out.push(
+      '// A verify skeptic casts one refutation vote on one item. Be skeptical: refute unless',
+      '// the item clearly survives scrutiny.',
+      'const VERDICT_SCHEMA = {',
+      '  type: "object",',
+      '  properties: {',
+      '    refuted: { type: "boolean", description: "true when the item does not hold up under scrutiny" },',
+      '    reason: { type: "string", description: "one-sentence justification for this verdict" },',
+      '  },',
+      '  required: ["refuted", "reason"],',
       '}',
     )
   }
@@ -571,6 +704,15 @@ function phaseDetail(
     case 'adversarial':
       base = `adversarial — ${who(spec, node.producer)} vs ${who(spec, node.critic)}`
       break
+    case 'refine':
+      base = `refine — ${who(spec, node.producer)} ⇄ ${who(spec, node.critic)} (revise until approved, ≤ ${node.maxIter})`
+      break
+    case 'verify':
+      base = `verify — ${who(spec, node.skeptic)} ×${node.votes} votes per item (majority gate, cap ${node.cap})`
+      break
+    case 'branches':
+      base = `branches — ${node.branches.map((ref) => who(spec, ref)).join(' ∥ ')} (parallel, once each)`
+      break
     case 'multiAngle':
       base = `multi-angle — ${who(spec, node.agent)} ×${node.angles} → vote ${who(spec, node.vote)}`
       break
@@ -607,7 +749,7 @@ export function emitScriptLines(spec: WorkflowSpec): EmitLine[] {
   const byId = phaseIndexById(phases)
 
   const header: EmitLine[] = [
-    ln(`// Dynamic workflow — generated by Prewire (one-way export; edit the spec, not this file).`),
+    ln(`// Dynamic workflow — generated by Playsheet (one-way export; edit the spec, not this file).`),
     ln(`// Target: ${RUNTIME_TAG}`),
     ln(
       `// Caps — concurrency ${spec.caps.concurrency}, total ${spec.caps.total} (fan-out counts are capped in-script; concurrency is the runtime's global cap).`,
@@ -636,11 +778,12 @@ export function emitScriptLines(spec: WorkflowSpec): EmitLine[] {
     asText: body.includes('asText('),
     loopSchema: body.includes('LOOP_SCHEMA'),
     fanoutSchema: body.includes('FANOUT_SCHEMA'),
+    refineSchema: body.includes('REFINE_SCHEMA'),
+    verdictSchema: body.includes('VERDICT_SCHEMA'),
   }
 
   const out: EmitLine[] = [...header, ln(''), ...renderMeta(spec, infos, byId)]
-  if (need.toItems || need.asText || need.loopSchema || need.fanoutSchema)
-    out.push(ln(''), ...helpers(need))
+  if (Object.values(need).some(Boolean)) out.push(ln(''), ...helpers(need))
   out.push(ln(''), ...bodyLines, ln(''), ln(ret))
 
   return out

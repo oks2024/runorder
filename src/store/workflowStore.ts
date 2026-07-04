@@ -20,6 +20,7 @@ import { INHERIT } from '@/lib/models'
 import { referencedAgentIds } from '@/lib/nodeRoles'
 import { schemaForcible } from '@/emit/plumbing'
 import type { PatternKey } from '@/lib/patterns'
+import { migrateStorageKey } from '@/io/storage'
 import { codeReviewLoop } from '@/spec/seed'
 import { workflowSpecSchema } from '@/spec/schema'
 import type { Agent, PatternNode, WorkflowSpec } from '@/spec/schema'
@@ -31,6 +32,12 @@ const LOOP_ITER_MAX = 20
 const LOOP_ITER_DEFAULT = 3
 const ANGLES_MAX = 8
 const ANGLES_DEFAULT = 3
+const REFINE_ITER_MAX = 10
+const REFINE_ITER_DEFAULT = 3
+const VOTES_MAX = 8
+const VOTES_DEFAULT = 3
+const BRANCHES_MAX = 8
+const BRANCHES_MIN = 2
 
 /**
  * Fresh-agent role names per pattern — dropping a pattern into the worksheet mints one new
@@ -40,9 +47,12 @@ const ANGLES_DEFAULT = 3
 const ROLE_NAMES: Record<PatternKey, string[]> = {
   step: ['agent'],
   fanout: ['worker'],
+  branches: ['branch', 'branch'], // dedupe yields branch, branch-2; addBranch mints more
   loop: ['refiner'],
   mapReduce: ['mapper', 'reducer'],
   adversarial: ['producer', 'critic'],
+  refine: ['drafter', 'judge'],
+  verify: ['skeptic'],
   multiAngle: ['taker', 'voter'],
   delegate: ['lead', 'helper'],
 }
@@ -51,9 +61,12 @@ const ROLE_NAMES: Record<PatternKey, string[]> = {
 const ITEM_FED: Record<PatternKey, boolean> = {
   step: false,
   fanout: true,
+  branches: false,
   loop: false,
   mapReduce: true,
   adversarial: false,
+  refine: false,
+  verify: true,
   multiAngle: false,
   delegate: false,
 }
@@ -86,9 +99,9 @@ export interface WorkflowState {
   removePhase: (index: number) => void
   /** Reorder by swapping with the neighbor in `dir` (-1 up, +1 down); bounds-checked. */
   movePhase: (index: number, dir: -1 | 1) => void
-  /** Set the primary agent of a phase (step/fanout/loop body/map/producer/angle). */
+  /** Set the primary agent of a phase (step/fanout/loop body/map/producer/drafter/skeptic/angle). */
   setPhaseAgent: (index: number, agentId: string) => void
-  /** Set the secondary agent of a composite phase (reduce/critic/vote/grant target). */
+  /** Set the secondary agent of a composite phase (reduce/critic/judge/vote/grant target). */
   setPhaseSecondaryAgent: (index: number, agentId: string) => void
   /** Replace a phase's memory reads (ids of earlier phases; validated by validateSpec). */
   setReads: (index: number, reads: string[]) => void
@@ -97,6 +110,15 @@ export interface WorkflowState {
   setMapCap: (index: number, cap: number) => void
   setAngles: (index: number, angles: number) => void
   setGrantCap: (index: number, cap: number) => void
+  setRefineMaxIter: (index: number, maxIter: number) => void
+  setVerifyVotes: (index: number, votes: number) => void
+  setVerifyCap: (index: number, cap: number) => void
+  /** Append a fresh branch agent to a branches phase (≤ 8 branches). */
+  addBranch: (index: number) => void
+  /** Remove one branch of a branches phase (a branches phase keeps ≥ 2). */
+  removeBranch: (index: number, branchIndex: number) => void
+  /** Retarget one branch of a branches phase to another agent. */
+  setBranchAgent: (index: number, branchIndex: number, agentId: string) => void
 
   // --- workspace ---
   /** Replace the whole spec (deep-cloned). Defaults to a fresh seed. */
@@ -179,6 +201,19 @@ function buildPatternNode(
       }
     case 'adversarial':
       return { type: 'adversarial', producer: agentIds[0], critic: agentIds[1], id, reads }
+    case 'refine':
+      return {
+        type: 'refine',
+        producer: agentIds[0],
+        critic: agentIds[1],
+        maxIter: REFINE_ITER_DEFAULT,
+        id,
+        reads,
+      }
+    case 'verify':
+      return { type: 'verify', skeptic: agentIds[0], votes: VOTES_DEFAULT, cap, id, reads }
+    case 'branches':
+      return { type: 'branches', branches: [...agentIds], id, reads }
     case 'multiAngle':
       return {
         type: 'multiAngle',
@@ -229,6 +264,8 @@ function mergePersisted(persisted: unknown, current: WorkflowState): WorkflowSta
   const parsed = workflowSpecSchema.safeParse(spec)
   return parsed.success ? { ...current, spec: parsed.data } : current
 }
+
+migrateStorageKey('prewire.live', 'playsheet.live')
 
 export const useWorkflowStore = create<WorkflowState>()(
   persist(
@@ -342,7 +379,9 @@ export const useWorkflowStore = create<WorkflowState>()(
           node.agent = agentId
         else if (node.type === 'iterateUntil' && node.body.type === 'agent') node.body.agent = agentId
         else if (node.type === 'mapReduce') node.map.agent = agentId
-        else if (node.type === 'adversarial') node.producer = agentId
+        else if (node.type === 'adversarial' || node.type === 'refine') node.producer = agentId
+        else if (node.type === 'verify') node.skeptic = agentId
+        else if (node.type === 'branches' && node.branches.length > 0) node.branches[0] = agentId
         gcUnreferencedAgents(s.spec)
       }),
 
@@ -352,7 +391,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         const node = s.spec.root.steps[index]
         if (!node) return
         if (node.type === 'mapReduce') node.reduce = agentId
-        else if (node.type === 'adversarial') node.critic = agentId
+        else if (node.type === 'adversarial' || node.type === 'refine') node.critic = agentId
         else if (node.type === 'multiAngle') node.vote = agentId
         else if (node.type === 'agent' && node.grants?.[0]) node.grants[0].agent = agentId
         gcUnreferencedAgents(s.spec)
@@ -398,13 +437,72 @@ export const useWorkflowStore = create<WorkflowState>()(
         if (node?.type === 'agent' && node.grants?.[0] && v !== undefined) node.grants[0].cap = v
       }),
 
+    setRefineMaxIter: (index, maxIter) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        const v = clampInt(maxIter, 1, REFINE_ITER_MAX)
+        if (node?.type === 'refine' && v !== undefined) node.maxIter = v
+      }),
+
+    setVerifyVotes: (index, votes) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        const v = clampInt(votes, 1, VOTES_MAX)
+        if (node?.type === 'verify' && v !== undefined) node.votes = v
+      }),
+
+    setVerifyCap: (index, cap) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        const v = clampInt(cap, 1, FANOUT_CAP_MAX)
+        if (node?.type === 'verify' && v !== undefined) node.cap = v
+      }),
+
+    addBranch: (index) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        if (node?.type !== 'branches' || node.branches.length >= BRANCHES_MAX) return
+        const id = newId()
+        s.spec.agents.push({
+          id,
+          name: dedupeName('branch', s.spec.agents),
+          model: INHERIT,
+          prompt: '',
+        })
+        node.branches.push(id)
+      }),
+
+    removeBranch: (index, branchIndex) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        if (node?.type !== 'branches' || node.branches.length <= BRANCHES_MIN) return
+        if (branchIndex < 0 || branchIndex >= node.branches.length) return
+        node.branches.splice(branchIndex, 1)
+        gcUnreferencedAgents(s.spec)
+      }),
+
+    setBranchAgent: (index, branchIndex, agentId) =>
+      set((s) => {
+        if (s.spec.root.type !== 'sequence') return
+        const node = s.spec.root.steps[index]
+        if (node?.type !== 'branches') return
+        if (branchIndex < 0 || branchIndex >= node.branches.length) return
+        node.branches[branchIndex] = agentId
+        gcUnreferencedAgents(s.spec)
+      }),
+
     load: (spec) =>
       set((s) => {
         s.spec = clone(spec ?? codeReviewLoop)
       }),
     })),
     {
-      name: 'prewire.live',
+      name: 'playsheet.live',
       version: 1,
       partialize: (s) => ({ spec: s.spec }),
       merge: mergePersisted,

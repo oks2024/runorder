@@ -24,6 +24,12 @@ export function patternKeyOf(node: EditableNode): PatternKey {
       return 'mapReduce'
     case 'adversarial':
       return 'adversarial'
+    case 'refine':
+      return 'refine'
+    case 'verify':
+      return 'verify'
+    case 'branches':
+      return 'branches'
     case 'multiAngle':
       return 'multiAngle'
     case 'agent':
@@ -35,9 +41,12 @@ export function patternKeyOf(node: EditableNode): PatternKey {
 export const KIND_LABEL: Record<PatternKey, string> = {
   step: 'step',
   fanout: 'fan-out',
+  branches: 'branches',
   loop: 'loop',
   mapReduce: 'map-reduce',
   adversarial: 'adversarial',
+  refine: 'refine',
+  verify: 'verify',
   multiAngle: 'multi-angle',
   delegate: 'delegate',
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveMemoryNames, memoryIndex } from './memoryNames'
+import { branchLabels, deriveMemoryNames, memoryIndex } from './memoryNames'
 import { codeReviewLoop } from '@/spec/seed'
 import type { WorkflowSpec } from '@/spec/schema'
 
@@ -51,6 +51,35 @@ describe('deriveMemoryNames', () => {
       },
     }
     expect(deriveMemoryNames(spec).map((e) => e.name)).toEqual(['reducer', 'voter', 'grantee'])
+  })
+
+  it('names a branches phase after every branch, joined in branch order', () => {
+    const spec: WorkflowSpec = {
+      name: 'x',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'c', name: 'Cast', model: 'inherit', prompt: '' },
+        { id: 'w', name: 'World', model: 'inherit', prompt: '' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'branches', branches: ['c', 'w'], id: 'n1' }],
+      },
+    }
+    expect(deriveMemoryNames(spec)).toEqual([{ nodeId: 'n1', name: 'cast+world' }])
+  })
+
+  it('branchLabels slugs each branch and falls back per dangling branch', () => {
+    const spec: WorkflowSpec = {
+      name: 'x',
+      caps: { concurrency: 4, total: 100 },
+      agents: [{ id: 'c', name: 'Cast Maker', model: 'inherit', prompt: '' }],
+      root: { type: 'sequence', steps: [] },
+    }
+    expect(branchLabels(spec, { type: 'branches', branches: ['c', 'ghost'], id: 'n1' })).toEqual([
+      'cast-maker',
+      'branch-2',
+    ])
   })
 
   it('falls back to phase-N for dangling refs and carries undefined ids through', () => {

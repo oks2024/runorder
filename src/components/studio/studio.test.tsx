@@ -143,14 +143,41 @@ describe('Studio worksheet — store-bound behavior', () => {
 })
 
 describe('Studio pattern shelf — drag-to-insert', () => {
-  it('renders all seven pattern cards with names, use-lines, and run-proven marks', () => {
+  it('renders all ten pattern cards with names, use-lines, and honest proof chips', () => {
     render(<App />)
     const shelf = screen.getByLabelText('Pattern playbook')
     for (const kind of PATTERN_ORDER) {
       expect(within(shelf).getByText(PATTERN_NAME[kind])).toBeInTheDocument()
       expect(within(shelf).getByText(PATTERN_INFO[kind].use)).toBeInTheDocument()
     }
+    // proven patterns wear the green chip; refine + verify + branches honestly wear the amber one
     expect(within(shelf).getAllByText('run-proven')).toHaveLength(7)
+    expect(within(shelf).getAllByText('not yet run-proven')).toHaveLength(3)
+  })
+
+  it('a branches phase renders one token per branch and can add/remove branches', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /^branches/i }))
+
+    // two fresh branch agents, one prompt block each
+    expect(screen.getByDisplayValue('branch')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('branch-2')).toBeInTheDocument()
+    expect(screen.getByLabelText('prompt — branch 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('prompt — branch 2')).toBeInTheDocument()
+
+    // grow to three — the remove affordance appears only above the two-branch floor
+    fireEvent.click(screen.getByRole('button', { name: '+ branch' }))
+    expect(screen.getByDisplayValue('branch-3')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove branch 3' }))
+    expect(screen.queryByDisplayValue('branch-3')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Remove branch/ })).not.toBeInTheDocument()
+
+    const root = useWorkflowStore.getState().spec.root
+    expect(root.type).toBe('sequence')
+    if (root.type === 'sequence') {
+      const node = root.steps[root.steps.length - 1]
+      expect(node.type === 'branches' && node.branches).toHaveLength(2)
+    }
   })
 
   it('clicking a pattern card appends a fresh phase (keyboard/touch fallback)', () => {

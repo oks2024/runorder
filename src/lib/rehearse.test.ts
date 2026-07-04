@@ -256,6 +256,129 @@ describe('rehearse — all seven patterns', () => {
   })
 })
 
+describe('rehearse — refine (bounded revise loop)', () => {
+  const spec: WorkflowSpec = {
+    name: 'refine',
+    caps: { concurrency: 4, total: 100 },
+    agents: [
+      { id: 'd', name: 'drafter', model: 'claude-opus-4-8', prompt: 'draft it' },
+      { id: 'j', name: 'judge', model: 'claude-sonnet-4-6', prompt: 'judge it' },
+    ],
+    root: { type: 'sequence', steps: [{ type: 'refine', producer: 'd', critic: 'j', maxIter: 4, id: 'n0' }] },
+  }
+  const r = rehearse(spec, 3)
+
+  it('runs two sequential ticks (draft, judge) with the revision-loop note', () => {
+    expect(r.ticks.map((t) => t.stage)).toEqual(['draft', 'judge'])
+    expect(r.ticks[0].note).toBe('× up to 4 revisions, sequential — stops when approved')
+    expect(r.breakdown).toBe('1 + 1')
+    expect(r.totalAgents).toBe(2)
+  })
+
+  it('gives the judge the {approved, critique} return and the drafter the phase memory', () => {
+    const drafter = r.ticks[0].instances[0]
+    expect(drafter.role).toBe('producer')
+    expect(seg(drafter.receives, 'returns')!.collectedInto).toBe('final output of the run')
+    const judge = r.ticks[1].instances[0]
+    expect(judge.role).toBe('critic')
+    expect(seg(judge.receives, 'returns')!.shape).toBe('{ approved, critique } (runtime-enforced)')
+    expect(seg(judge.receives, 'returns')!.collectedInto).toContain('gates')
+  })
+})
+
+describe('rehearse — verify (per-item refuter jury, majority gate)', () => {
+  const spec: WorkflowSpec = {
+    name: 'verify',
+    caps: { concurrency: 8, total: 1000 },
+    agents: [
+      { id: 'f', name: 'finder', model: 'claude-opus-4-8', prompt: 'find issues' },
+      { id: 's', name: 'skeptic', model: 'claude-haiku-4-5', prompt: 'refute it' },
+      { id: 'w', name: 'fixer', model: 'claude-sonnet-4-6', prompt: 'fix one' },
+    ],
+    root: {
+      type: 'sequence',
+      steps: [
+        { type: 'agent', agent: 'f', id: 'n0' },
+        { type: 'verify', skeptic: 's', votes: 3, cap: 4, id: 'n1' },
+        { type: 'fanout', agent: 'w', cap: 8, id: 'n2' },
+      ],
+    },
+  }
+  const r = rehearse(spec, 6)
+
+  it('convenes a jury per capped item and drops whole items beyond the cap', () => {
+    const t = r.ticks[1]
+    expect(t.kind).toBe('verify')
+    expect(t.note).toBe('majority gate — survivors decided at run time')
+    // 4 kept items × 3 votes live, plus one dropped card per dropped item (items 5 and 6)
+    expect(t.instances.filter((i) => !i.dropped)).toHaveLength(12)
+    expect(t.instances.filter((i) => i.dropped)).toHaveLength(2)
+    expect(t.instances[0].role).toBe('skeptic')
+    expect(seg(t.instances[0].receives, 'system')!.text).toContain('vote 1 of 3 on item 1')
+    expect(seg(t.instances[0].receives, 'returns')!.shape).toBe('{ refuted, reason } (runtime-enforced)')
+    expect(r.capWarnings).toEqual([
+      { phaseIndex: 1, nodeId: 'n1', kind: 'verify', cap: 4, incoming: 6, dropped: 2 },
+    ])
+  })
+
+  it('renders the verify tick as a parallel swarm in the breakdown', () => {
+    expect(r.breakdown).toBe('1 + 12∥ + 4∥')
+  })
+
+  it('labels the survivor gap as an upper bound and feeds the fan-out the exact array', () => {
+    expect(r.gaps[1].countLabel).toBe('skeptic — ≤ 4 survivors (majority gate)')
+    // downstream fan-out iterates the survivors: ≤4 items, exact array — no heuristic split
+    const worker = r.ticks[2].instances[0]
+    expect(seg(worker.receives, 'item')!.source).toContain('majority-gate survivors (exact array)')
+    expect(r.ticks[2].instances).toHaveLength(4)
+  })
+})
+
+describe('rehearse — branches (heterogeneous parallel)', () => {
+  const spec: WorkflowSpec = {
+    name: 'branches',
+    caps: { concurrency: 8, total: 1000 },
+    agents: [
+      { id: 'set', name: 'setting', model: 'claude-opus-4-8', prompt: 'invent a setting' },
+      { id: 'c', name: 'cast', model: 'claude-sonnet-4-6', prompt: 'create the cast' },
+      { id: 'w', name: 'world', model: 'claude-haiku-4-5', prompt: 'map the world' },
+      { id: 'wr', name: 'writer', model: 'claude-opus-4-8', prompt: 'write it' },
+    ],
+    root: {
+      type: 'sequence',
+      steps: [
+        { type: 'agent', agent: 'set', id: 'n0' },
+        { type: 'branches', branches: ['c', 'w'], id: 'n1', reads: ['n0'] },
+        { type: 'agent', agent: 'wr', id: 'n2', reads: ['n1'] },
+      ],
+    },
+  }
+  const r = rehearse(spec, 3)
+
+  it('runs every branch in one parallel tick, each with the same reads', () => {
+    const t = r.ticks[1]
+    expect(t.kind).toBe('branches')
+    expect(t.instances.map((i) => i.agentName)).toEqual(['cast', 'world'])
+    expect(t.instances.map((i) => i.role)).toEqual(['branch', 'branch'])
+    for (const inst of t.instances) {
+      expect(seg(inst.receives, 'read')!.memoryName).toBe('setting')
+    }
+    // each branch's output lands at its own index of the branch-ordered memory
+    expect(seg(t.instances[0].receives, 'returns')!.collectedInto).toBe('cast+world[0]')
+    expect(r.breakdown).toBe('1 + 2∥ + 1')
+    expect(r.gaps[1].countLabel).toBe('cast+world — 2 labeled outputs')
+  })
+
+  it('splices a branches memory into a reader as one labeled block per branch', () => {
+    const writer = r.ticks[2].instances[0]
+    const readSegs = writer.receives.filter((s) => s.kind === 'read')
+    expect(readSegs.map((s) => (s as { memoryName: string }).memoryName)).toEqual([
+      'cast',
+      'world',
+    ])
+  })
+})
+
 describe('rehearse — concurrency queueing (live > cap, no drop)', () => {
   const spec: WorkflowSpec = {
     name: 'wide-fanout',

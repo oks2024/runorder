@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { deriveMemoryNames } from '@/lib/memoryNames'
-import { isSchemaForced } from '@/emit/plumbing'
+import { isSchemaForced, yieldsItemArray } from '@/emit/plumbing'
 import { referencedAgentIds } from '@/lib/nodeRoles'
 import { INHERIT } from '@/lib/models'
 import { provKey, type ProvField } from '@/lib/prov'
@@ -41,6 +41,12 @@ export function PhaseSentence({
   const setMapCap = useWorkflowStore((s) => s.setMapCap)
   const setAngles = useWorkflowStore((s) => s.setAngles)
   const setGrantCap = useWorkflowStore((s) => s.setGrantCap)
+  const setRefineMaxIter = useWorkflowStore((s) => s.setRefineMaxIter)
+  const setVerifyVotes = useWorkflowStore((s) => s.setVerifyVotes)
+  const setVerifyCap = useWorkflowStore((s) => s.setVerifyCap)
+  const addBranch = useWorkflowStore((s) => s.addBranch)
+  const removeBranch = useWorkflowStore((s) => s.removeBranch)
+  const setBranchAgent = useWorkflowStore((s) => s.setBranchAgent)
 
   const nodeId = 'id' in node ? node.id : undefined
   /** This phase's provenance key for `field`, or undefined for an id-less node — never tag a
@@ -74,9 +80,9 @@ export function PhaseSentence({
     )
   }
 
-  /** Model pill for a ref + its enforced mark, wrapped in the phase's `model`/`model2`
+  /** Model pill for a ref + its enforced mark, wrapped in the phase's `model`/`model2`/…
    *  provenance key so hovering it lights the exact script line(s) that name this model. */
-  const M = (ref: string, field: 'model' | 'model2'): ReactNode => {
+  const M = (ref: string, field: ProvField): ReactNode => {
     const agent = agentOf(ref)
     if (!agent) return null
     return (
@@ -87,13 +93,11 @@ export function PhaseSentence({
     )
   }
 
-  /** ⟨source⟩ for a fan-out/map — mirrors the emitter's `itemsExpr`. */
+  /** ⟨source⟩ for a fan-out/map/verify — mirrors the emitter's `itemsExpr`. */
   const source = (): ReactNode => {
     if (index === 0) return <>the workflow args</>
     const prev = phases[index - 1]
-    const prevIsArray =
-      prev.type === 'fanout' || (prev.type === 'agent' && !!prev.grants && prev.grants.length > 0)
-    if (isSchemaForced(phases, index - 1) || prevIsArray) {
+    if (isSchemaForced(phases, index - 1) || yieldsItemArray(prev)) {
       const name = deriveMemoryNames(spec)[index - 1]?.name ?? `phase-${index}`
       return <span className={mem}>{name}</span>
     }
@@ -202,6 +206,97 @@ export function PhaseSentence({
           {A(node.critic, 'secondary')} attacks the draft on {M(node.critic, 'model2')}
         </p>
       )
+    case 'refine':
+      return (
+        <p className={pline}>
+          {A(node.producer)} drafts on {M(node.producer, 'model')}; then{' '}
+          {A(node.critic, 'secondary')} judges it on {M(node.critic, 'model2')}, sending it back
+          for revision up to{' '}
+          <ProvSpan keys={key('iters')}>
+            <NumToken
+              value={node.maxIter}
+              min={1}
+              max={10}
+              label="max revisions"
+              onCommit={(n) => setRefineMaxIter(index, n)}
+            />
+            <EnfMark />
+          </ProvSpan>{' '}
+          times until approved
+        </p>
+      )
+    case 'verify':
+      return (
+        <p className={pline}>
+          {A(node.skeptic)} tries to refute each item of {source()} with{' '}
+          <ProvSpan keys={key('votes')}>
+            <NumToken
+              value={node.votes}
+              min={1}
+              max={8}
+              label="votes per item"
+              onCommit={(n) => setVerifyVotes(index, n)}
+            />
+            <EnfMark />
+          </ProvSpan>{' '}
+          independent votes, at most{' '}
+          <ProvSpan keys={key('cap')}>
+            <NumToken
+              value={node.cap}
+              min={1}
+              max={16}
+              label="verify cap"
+              onCommit={(n) => setVerifyCap(index, n)}
+            />
+            <EnfMark />
+          </ProvSpan>{' '}
+          items, on {M(node.skeptic, 'model')}; only items a majority fails to refute survive
+        </p>
+      )
+    case 'branches': {
+      const total = node.branches.length
+      return (
+        <p className={pline}>
+          {node.branches.map((ref, k) => {
+            const agent = agentOf(ref)
+            const others = agent ? referencedAgents.filter((a) => a.id !== agent.id) : undefined
+            return (
+              <span key={`${ref}-${k}`}>
+                {k > 0 && (k === total - 1 ? ' and ' : ', ')}
+                <AgentToken
+                  agent={agent}
+                  danglingRef={ref}
+                  otherAgents={others}
+                  onRetarget={(id) => setBranchAgent(index, k, id)}
+                />{' '}
+                on {M(ref, k === 0 ? 'model' : `model${k + 1}`)}
+                {total > 2 && (
+                  <button
+                    type="button"
+                    title={`Remove branch ${k + 1}`}
+                    aria-label={`Remove branch ${k + 1}`}
+                    onClick={() => removeBranch(index, k)}
+                    className="ml-0.5 rounded px-0.5 text-[13px] leading-none text-ink-faint hover:text-danger"
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            )
+          })}{' '}
+          each run once, in parallel, on the same input
+          {total < 8 && (
+            <button
+              type="button"
+              onClick={() => addBranch(index)}
+              className="ml-2 rounded-[4px] border border-dashed border-rule px-1.5 font-mono text-[11px] text-ink-faint hover:border-ink-faint hover:text-ink-dim"
+            >
+              + branch
+            </button>
+          )}
+        </p>
+      )
+    }
     case 'multiAngle':
       return (
         <p className={pline}>

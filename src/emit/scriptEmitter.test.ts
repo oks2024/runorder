@@ -248,13 +248,153 @@ describe('emitScript — runtime-faithful contract', () => {
     expect(out).toContain('detail: "step — lead → claude-opus-4-8 (delegates ≤ 4 to inv → claude-sonnet-4-6)"')
   })
 
+  it('emits refine as a bounded draft→judge loop with a schema-driven approval break', () => {
+    const spec: WorkflowSpec = {
+      name: 'refine',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'd', name: 'drafter', model: 'opus', prompt: 'draft it' },
+        { id: 'j', name: 'judge', model: 'sonnet', prompt: 'judge it' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [{ type: 'refine', producer: 'd', critic: 'j', maxIter: 4 }],
+      },
+    }
+    const out = emitScript(spec)
+    expect(out).toContain('for (let i = 0; i < 4; i++)')
+    expect(out).toContain('const REFINE_SCHEMA = {')
+    expect(out).toContain('{ model: "claude-sonnet-4-6", label: "judge", schema: REFINE_SCHEMA }')
+    expect(out).toContain('if (verdict == null || verdict.approved) break')
+    expect(out).toContain('Critique to address:\\n" + asText(p1_note)')
+    expect(out).toContain(
+      'detail: "refine — drafter → claude-opus-4-8 ⇄ judge → claude-sonnet-4-6 (revise until approved, ≤ 4)"',
+    )
+    // The critique drives the NEXT revision — it is never part of the phase's memory.
+    expect(out).toContain('return p1')
+  })
+
+  it('emits verify as a per-item refuter jury with an in-script majority gate', () => {
+    const spec: WorkflowSpec = {
+      name: 'verify',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'f', name: 'finder', model: 'opus', prompt: 'find issues' },
+        { id: 's', name: 'skeptic', model: 'haiku', prompt: 'refute it' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'f', id: 'n1' },
+          { type: 'verify', skeptic: 's', votes: 3, cap: 6, id: 'n2' },
+        ],
+      },
+    }
+    const out = emitScript(spec)
+    // The finder feeds an item-consumer → forced { context, items }; verify maps the exact array.
+    expect(out).toContain('{ model: "claude-opus-4-8", label: "finder", schema: FANOUT_SCHEMA }')
+    expect(out).toContain('const p2_pool = p1.items.slice(0, 6)')
+    // Three schema-enforced votes per item, then the deterministic gate.
+    expect(out).toContain('Array.from({ length: 3 }, (_, k) => () =>')
+    expect(out).toContain('label: "skeptic (vote " + (k + 1) + ")", schema: VERDICT_SCHEMA')
+    expect(out).toContain('const VERDICT_SCHEMA = {')
+    expect(out).toContain('vs.filter((v) => v.refuted).length * 2 < vs.length')
+    expect(out).toContain(
+      'detail: "verify — skeptic → claude-haiku-4-5 ×3 votes per item (majority gate, cap 6)"',
+    )
+  })
+
+  it('emits branches as heterogeneous parallel agents with per-branch labeled reads', () => {
+    const spec: WorkflowSpec = {
+      name: 'br',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'set', name: 'setting', model: 'opus', prompt: 'invent a setting' },
+        { id: 'c', name: 'cast', model: 'sonnet', prompt: 'create the cast' },
+        { id: 'w', name: 'world', model: 'haiku', prompt: 'map the world' },
+        { id: 'wr', name: 'writer', model: 'opus', prompt: 'write the story' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'agent', agent: 'set', id: 'n1' },
+          { type: 'branches', branches: ['c', 'w'], id: 'n2', reads: ['n1'] },
+          { type: 'agent', agent: 'wr', id: 'n3', reads: ['n2'] },
+        ],
+      },
+    }
+    const out = emitScript(spec)
+    // one parallel() with one thunk per branch; every branch gets the same reads
+    expect(out).toContain('const p2 = await parallel([')
+    expect(out).toContain('"create the cast" + "\\n\\n[setting]\\n" + asText(p1)')
+    expect(out).toContain('"map the world" + "\\n\\n[setting]\\n" + asText(p1)')
+    // per-branch pinned models are routed literally
+    expect(out).toContain('{ model: "claude-sonnet-4-6", label: "cast" }')
+    expect(out).toContain('{ model: "claude-haiku-4-5", label: "world" }')
+    // a reader of the branches memory gets one labeled block PER BRANCH, by index
+    expect(out).toContain(
+      '"write the story" + "\\n\\n[cast]\\n" + asText(p2[0]) + "\\n\\n[world]\\n" + asText(p2[1])',
+    )
+    expect(out).toContain(
+      'detail: "branches — cast → claude-sonnet-4-6 ∥ world → claude-haiku-4-5 (parallel, once each) · reads setting"',
+    )
+    // the reader's detail names the joined branches memory
+    expect(out).toContain('detail: "step — writer → claude-opus-4-8 · reads cast+world"')
+  })
+
+  it('feeds a fan-out from branches directly (exact array of branch outputs)', () => {
+    const spec: WorkflowSpec = {
+      name: 'bf',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 'c', name: 'cast', model: 'inherit', prompt: 'create the cast' },
+        { id: 'w', name: 'world', model: 'inherit', prompt: 'map the world' },
+        { id: 'x', name: 'expander', model: 'inherit', prompt: 'expand it' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'branches', branches: ['c', 'w'], id: 'n1' },
+          { type: 'fanout', agent: 'x', cap: 4, id: 'n2' },
+        ],
+      },
+    }
+    const out = emitScript(spec)
+    // branch outputs are already an exact array — sliced directly, no schema, no heuristic
+    expect(out).toContain('p1.slice(0, 4)')
+    expect(out).not.toContain('toItems(p1)')
+    expect(out).not.toContain('schema: FANOUT_SCHEMA')
+  })
+
+  it('feeds a fan-out from verify survivors directly (already an exact array)', () => {
+    const spec: WorkflowSpec = {
+      name: 'vf',
+      caps: { concurrency: 4, total: 100 },
+      agents: [
+        { id: 's', name: 'skeptic', model: 'inherit', prompt: 'refute' },
+        { id: 'w', name: 'worker', model: 'inherit', prompt: 'work' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'verify', skeptic: 's', votes: 1, cap: 4, id: 'n1' },
+          { type: 'fanout', agent: 'w', cap: 4, id: 'n2' },
+        ],
+      },
+    }
+    const out = emitScript(spec)
+    // survivors are an exact array — the downstream fan-out slices it, no schema, no heuristic
+    expect(out).toContain('p1.slice(0, 4)')
+    expect(out).not.toContain('toItems(p1)')
+  })
+
   it('is deterministic (same spec → identical output)', () => {
     expect(emitScript(codeReviewLoop)).toBe(emitScript(codeReviewLoop))
   })
 
   it('matches the golden script for the code-review-loop seed', () => {
     expect(emitScript(codeReviewLoop)).toMatchInlineSnapshot(`
-      "// Dynamic workflow — generated by Prewire (one-way export; edit the spec, not this file).
+      "// Dynamic workflow — generated by Playsheet (one-way export; edit the spec, not this file).
       // Target: claude-code dynamic-workflow runtime · probed 2026-07-02
       // Caps — concurrency 8, total 1000 (fan-out counts are capped in-script; concurrency is the runtime's global cap).
       // Context flow is explicit: each agent receives ONLY the [memory] blocks its phase reads (plus its pattern's own piping).

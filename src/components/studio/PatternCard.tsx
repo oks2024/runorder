@@ -5,7 +5,8 @@ import { PATTERN_INFO, PATTERN_NAME, PATTERN_DND_MIME, type PatternKey } from '@
 import { PATTERN_GLYPHS } from './glyphs'
 
 /**
- * One shelf card (mockup `.pat`): topology glyph + name + one-liner + run-proven mark. A
+ * One shelf card (mockup `.pat`): topology glyph + name + one-liner + proof chip (run-proven
+ * in enforced green, or an honest "not yet run-proven" in intended amber — guardrail #3). A
  * `draggable` button — dragging it out sets `dataTransfer` and flags the uiStore so drop
  * zones (`Seam`/`DropEnd`) light up; a plain click/Enter appends it at the end of the
  * worksheet (keyboard/touch fallback, since HTML5 DnD has neither).
@@ -51,10 +52,17 @@ export function PatternCard({ kind }: { kind: PatternKey }) {
           {PATTERN_NAME[kind]}
         </span>
         <span className="block text-[10px] leading-[1.3] text-ink-faint">{info.use}</span>
-        <span className="font-mono text-[7.5px] tracking-[0.1em] text-enforced uppercase">
-          <span aria-hidden>{'● '}</span>
-          <span>run-proven</span>
-        </span>
+        {info.proven ? (
+          <span className="font-mono text-[7.5px] tracking-[0.1em] text-enforced uppercase">
+            <span aria-hidden>{'● '}</span>
+            <span>run-proven</span>
+          </span>
+        ) : (
+          <span className="font-mono text-[7.5px] tracking-[0.1em] text-intended uppercase">
+            <span aria-hidden>{'○ '}</span>
+            <span>not yet run-proven</span>
+          </span>
+        )}
       </span>
     </button>
   )

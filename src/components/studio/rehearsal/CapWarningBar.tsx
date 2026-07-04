@@ -9,6 +9,7 @@ const KIND_LABEL: Record<CapWarning['kind'], string> = {
   fanout: 'fan-out',
   mapReduce: 'map-reduce',
   delegate: 'delegation',
+  verify: 'verify',
 }
 
 /**
@@ -20,6 +21,7 @@ export function CapWarningBar({ warning }: { warning: CapWarning }) {
   const setFanoutCap = useWorkflowStore((s) => s.setFanoutCap)
   const setMapCap = useWorkflowStore((s) => s.setMapCap)
   const setGrantCap = useWorkflowStore((s) => s.setGrantCap)
+  const setVerifyCap = useWorkflowStore((s) => s.setVerifyCap)
 
   const target = Math.min(warning.incoming, CAP_MAX)
   const fixLabel = warning.incoming > CAP_MAX ? `raise cap to ${CAP_MAX} (max)` : `raise cap to ${target}`
@@ -27,6 +29,7 @@ export function CapWarningBar({ warning }: { warning: CapWarning }) {
   const fix = () => {
     if (warning.kind === 'fanout') setFanoutCap(warning.phaseIndex, target)
     else if (warning.kind === 'mapReduce') setMapCap(warning.phaseIndex, target)
+    else if (warning.kind === 'verify') setVerifyCap(warning.phaseIndex, target)
     else setGrantCap(warning.phaseIndex, target)
   }
 

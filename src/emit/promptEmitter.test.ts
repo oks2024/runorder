@@ -55,6 +55,45 @@ describe('emitPrompt — faithfulness contract', () => {
     expect(emitPrompt(spec)).toContain('writer repeated until it reports done (≤ 5 iterations)')
   })
 
+  it('renders refine and verify as closed constraints (revise-until-approved, majority gate)', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      agents: [
+        { id: 'd', name: 'drafter', model: 'opus', prompt: 'draft' },
+        { id: 'j', name: 'judge', model: 'sonnet', prompt: 'judge' },
+        { id: 's', name: 'skeptic', model: 'haiku', prompt: 'refute' },
+      ],
+      root: {
+        type: 'sequence',
+        steps: [
+          { type: 'refine', producer: 'd', critic: 'j', maxIter: 4, id: 'n1' },
+          { type: 'verify', skeptic: 's', votes: 3, cap: 6, id: 'n2' },
+        ],
+      },
+    }
+    const out = emitPrompt(spec)
+    expect(out).toContain(
+      '1. refine  — drafter drafts, judge judges approve/reject with a critique; revise against the critique until approved (≤ 4 rounds); the phase output is the final draft',
+    )
+    expect(out).toContain(
+      '2. verify  — skeptic casts 3 independent refutation votes per item of the prior output (≤ 6 items); keep ONLY items whose refutals are a strict minority — the phase output is the surviving items',
+    )
+  })
+
+  it('renders branches as distinct agents run in parallel with labeled outputs', () => {
+    const spec: WorkflowSpec = {
+      ...codeReviewLoop,
+      agents: [
+        { id: 'c', name: 'cast', model: 'sonnet', prompt: 'c' },
+        { id: 'w', name: 'world', model: 'haiku', prompt: 'w' },
+      ],
+      root: { type: 'sequence', steps: [{ type: 'branches', branches: ['c', 'w'] }] },
+    }
+    expect(emitPrompt(spec)).toContain(
+      "1. branch  — cast, world run once each, IN PARALLEL, on the same reads; keep every output separate and labeled with its agent's name — the phase output is that labeled set, in branch order",
+    )
+  })
+
   it('renders the composite patterns (map-reduce, adversarial, multi-angle, delegate)', () => {
     const spec: WorkflowSpec = {
       ...codeReviewLoop,

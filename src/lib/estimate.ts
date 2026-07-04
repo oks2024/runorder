@@ -21,6 +21,12 @@ function nodeSize(node: PatternNode): number {
       return 2
     case 'multiAngle':
       return node.angles + 1
+    case 'refine':
+      return 2 * node.maxIter // one draft + one verdict per revision round
+    case 'verify':
+      return node.cap * node.votes // a full jury per (capped) item
+    case 'branches':
+      return node.branches.length // each branch agent runs exactly once
     case 'iterateUntil':
       return nodeSize(node.body) * node.maxIter
   }

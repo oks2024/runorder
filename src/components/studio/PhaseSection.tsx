@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { INHERIT } from '@/lib/models'
+import type { ProvField } from '@/lib/prov'
 import type { Agent, PatternNode } from '@/spec/schema'
 import { PhaseSentence } from './PhaseSentence'
 import { PromptBlock } from './PromptBlock'
@@ -21,6 +22,15 @@ function promptRoles(node: EditableNode): Array<{ ref: string; role?: string }> 
         { ref: node.producer, role: 'producer' },
         { ref: node.critic, role: 'critic' },
       ]
+    case 'refine':
+      return [
+        { ref: node.producer, role: 'drafter' },
+        { ref: node.critic, role: 'judge' },
+      ]
+    case 'verify':
+      return [{ ref: node.skeptic, role: 'skeptic' }]
+    case 'branches':
+      return node.branches.map((ref, k) => ({ ref, role: `branch ${k + 1}` }))
     case 'multiAngle':
       return [
         { ref: node.agent, role: 'taker' },
@@ -94,7 +104,9 @@ export function PhaseSection({
         <PhaseSentence node={node} index={index} phases={phases} />
         {promptRoles(node).map(({ ref, role }, i) => {
           const agent = agentOf(ref)
-          const field: 'prompt' | 'prompt2' = i === 0 ? 'prompt' : 'prompt2'
+          // Matches the emitter's numbering: primary → `prompt`, every later role → `promptN`
+          // (`prompt2` is the secondary of two-agent phases; branches keep counting up).
+          const field: ProvField = i === 0 ? 'prompt' : `prompt${i + 1}`
           return agent ? (
             <PromptBlock
               key={`${ref}-${role ?? 'p'}`}

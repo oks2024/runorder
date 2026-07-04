@@ -41,6 +41,15 @@ function collectRefs(node: PatternNode, acc: AgentRef[]): void {
     case 'multiAngle':
       acc.push(node.agent, node.vote)
       break
+    case 'refine':
+      acc.push(node.producer, node.critic)
+      break
+    case 'verify':
+      acc.push(node.skeptic)
+      break
+    case 'branches':
+      acc.push(...node.branches)
+      break
     case 'iterateUntil':
       collectRefs(node.body, acc)
       break
@@ -63,7 +72,7 @@ function collectGrantEdges(node: PatternNode, acc: Array<[AgentRef, AgentRef]>):
     case 'agent':
       node.grants?.forEach((g) => acc.push([node.agent, g.agent]))
       break
-    // fanout/mapReduce/adversarial/multiAngle carry no grants.
+    // fanout/mapReduce/adversarial/multiAngle/refine/verify/branches carry no grants.
   }
 }
 
