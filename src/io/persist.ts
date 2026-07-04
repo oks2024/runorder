@@ -51,7 +51,10 @@ export function parseImport(text: string): ImportResult {
 
   const parsed = workflowSpecSchema.safeParse(candidate)
   if (!parsed.success) {
-    return { ok: false, error: `Not a valid workflow: ${firstZodMessage(parsed.error)}` }
+    return {
+      ok: false,
+      error: `Not a valid workflow: ${firstZodMessage(parsed.error)}`,
+    }
   }
 
   const graph = validateSpec(parsed.data)
@@ -70,6 +73,42 @@ export function specFilename(spec: WorkflowSpec): string {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'workflow'
   return `${slug}.json`
+}
+
+/**
+ * Structural equality of two specs — the "has the live worksheet diverged from its saved
+ * entry?" check. Key-order-insensitive and treats `undefined`-valued keys as absent, because
+ * one side may have round-tripped through Zod/localStorage and the other may be a literal.
+ */
+export function specsEqual(a: WorkflowSpec, b: WorkflowSpec): boolean {
+  return deepEqual(a, b)
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length)
+      return false
+    return a.every((v, i) => deepEqual(v, b[i]))
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const ka = definedKeys(a)
+    const kb = definedKeys(b)
+    if (ka.length !== kb.length) return false
+    return ka.every((k) =>
+      deepEqual(
+        (a as Record<string, unknown>)[k],
+        (b as Record<string, unknown>)[k],
+      ),
+    )
+  }
+  return false
+}
+
+function definedKeys(obj: object): string[] {
+  return Object.keys(obj).filter(
+    (k) => (obj as Record<string, unknown>)[k] !== undefined,
+  )
 }
 
 /** Peel the `{ prewire, spec }` envelope if present; otherwise treat the value as a bare spec. */

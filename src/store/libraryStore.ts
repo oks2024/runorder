@@ -14,6 +14,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { WorkflowSpec } from '@/spec/schema'
+import { blankSpec, codeReviewLoop } from '@/spec/seed'
+import { specsEqual } from '@/io/persist'
 import { useWorkflowStore } from './workflowStore'
 
 export interface SavedEntry {
@@ -33,6 +35,11 @@ export interface LibraryState {
   /** Load a saved entry into the live worksheet; no-op if the name is unknown. */
   open: (name: string) => void
   remove: (name: string) => void
+  /**
+   * Would replacing the live worksheet lose work? True when `spec` differs from its library
+   * entry — or, if it was never saved, from the untouched seed/blank starting points.
+   */
+  isDirty: (spec: WorkflowSpec) => boolean
 }
 
 export const useLibraryStore = create<LibraryState>()(
@@ -40,7 +47,8 @@ export const useLibraryStore = create<LibraryState>()(
     (set, get) => ({
       entries: {},
 
-      names: () => Object.keys(get().entries).sort((a, b) => a.localeCompare(b)),
+      names: () =>
+        Object.keys(get().entries).sort((a, b) => a.localeCompare(b)),
 
       has: (name) => name in get().entries,
 
@@ -48,7 +56,10 @@ export const useLibraryStore = create<LibraryState>()(
         set((s) => ({
           entries: {
             ...s.entries,
-            [spec.name]: { spec: structuredClone(spec), savedAt: new Date().toISOString() },
+            [spec.name]: {
+              spec: structuredClone(spec),
+              savedAt: new Date().toISOString(),
+            },
           },
         })),
 
@@ -63,7 +74,19 @@ export const useLibraryStore = create<LibraryState>()(
           delete next[name]
           return { entries: next }
         }),
+
+      isDirty: (spec) => {
+        const entry = get().entries[spec.name]
+        if (entry) return !specsEqual(entry.spec, spec)
+        return (
+          !specsEqual(spec, codeReviewLoop) && !specsEqual(spec, blankSpec())
+        )
+      },
     }),
-    { name: 'prewire.library', version: 1, partialize: (s) => ({ entries: s.entries }) },
+    {
+      name: 'prewire.library',
+      version: 1,
+      partialize: (s) => ({ entries: s.entries }),
+    },
   ),
 )

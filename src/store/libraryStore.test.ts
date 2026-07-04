@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useLibraryStore } from './libraryStore'
 import { useWorkflowStore } from './workflowStore'
-import { codeReviewLoop } from '@/spec/seed'
+import { blankSpec, codeReviewLoop } from '@/spec/seed'
 import type { WorkflowSpec } from '@/spec/schema'
 
 const lib = useLibraryStore
@@ -24,9 +24,13 @@ describe('libraryStore — save', () => {
 
   it('overwrites the same name in place (upsert, not append)', () => {
     lib.getState().save(codeReviewLoop)
-    lib.getState().save({ ...codeReviewLoop, caps: { concurrency: 4, total: 100 } })
+    lib
+      .getState()
+      .save({ ...codeReviewLoop, caps: { concurrency: 4, total: 100 } })
     expect(lib.getState().names()).toEqual(['code-review-loop'])
-    expect(lib.getState().entries['code-review-loop'].spec.caps.concurrency).toBe(4)
+    expect(
+      lib.getState().entries['code-review-loop'].spec.caps.concurrency,
+    ).toBe(4)
   })
 
   it('keeps distinct names separately, sorted', () => {
@@ -53,6 +57,29 @@ describe('libraryStore — open', () => {
   it('is a no-op for an unknown name', () => {
     lib.getState().open('nope')
     expect(wf.getState().spec.name).toBe('code-review-loop')
+  })
+})
+
+describe('libraryStore — isDirty', () => {
+  it('the untouched seed and a fresh blank are clean (never nag a pristine doc)', () => {
+    expect(lib.getState().isDirty(wf.getState().spec)).toBe(false)
+    expect(lib.getState().isDirty(blankSpec())).toBe(false)
+  })
+
+  it('an edited, never-saved doc is dirty', () => {
+    wf.getState().setName('my-flow')
+    expect(lib.getState().isDirty(wf.getState().spec)).toBe(true)
+  })
+
+  it('a doc matching its saved entry is clean; diverging from it is dirty', () => {
+    const saved: WorkflowSpec = { ...codeReviewLoop, name: 'my-flow' }
+    lib.getState().save(saved)
+    expect(lib.getState().isDirty(saved)).toBe(false)
+    expect(
+      lib
+        .getState()
+        .isDirty({ ...saved, caps: { concurrency: 4, total: 100 } }),
+    ).toBe(true)
   })
 })
 

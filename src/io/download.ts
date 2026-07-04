@@ -5,7 +5,11 @@
  */
 
 /** Trigger a client-side download of `text` as a file named `filename` (best-effort). */
-export function downloadText(filename: string, text: string, mime = 'application/json'): void {
+export function downloadText(
+  filename: string,
+  text: string,
+  mime = 'application/json',
+): void {
   const blob = new Blob([text], { type: mime })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -19,16 +23,22 @@ export function downloadText(filename: string, text: string, mime = 'application
 }
 
 /**
- * Prompt the user to pick a file and resolve with its text. Resolves `null` if the picker is
- * dismissed without a selection (best-effort — the native dialog gives no reliable cancel event,
- * so callers should treat a never-resolving promise as "cancelled" and not block on it).
+ * Prompt the user to pick a file and resolve with its text. Resolves `null` when the picker is
+ * dismissed without a selection (the file input's `cancel` event, supported by all evergreen
+ * browsers; on older ones the promise never settles, so callers must not block on it).
  */
-export function readFileText(accept = '.json,application/json'): Promise<string | null> {
+export function readFileText(
+  accept = '.json,application/json',
+): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = accept
     input.style.display = 'none'
+    input.addEventListener('cancel', () => {
+      document.body.removeChild(input)
+      resolve(null)
+    })
     input.addEventListener('change', () => {
       const file = input.files?.[0]
       document.body.removeChild(input)
@@ -37,8 +47,10 @@ export function readFileText(accept = '.json,application/json'): Promise<string 
         return
       }
       const reader = new FileReader()
-      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
-      reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'))
+      reader.onload = () =>
+        resolve(typeof reader.result === 'string' ? reader.result : null)
+      reader.onerror = () =>
+        reject(reader.error ?? new Error('Failed to read file'))
       reader.readAsText(file)
     })
     document.body.appendChild(input)

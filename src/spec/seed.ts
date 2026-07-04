@@ -13,7 +13,25 @@
  *
  * Used by tests now; the UI will load it as the default workspace later.
  */
+import { INHERIT } from '@/lib/models'
 import type { WorkflowSpec } from './schema'
+
+/**
+ * The starting point for "New workflow": one unnamed agent in a single step, everything at
+ * defaults. A function (not a constant) so callers can't share/mutate one instance; literal
+ * ids can't collide with store-minted ones (those are UUIDs).
+ */
+export function blankSpec(): WorkflowSpec {
+  return {
+    name: 'untitled',
+    caps: { concurrency: 8, total: 1000 },
+    agents: [{ id: 'agent-1', name: 'agent-1', model: INHERIT, prompt: '' }],
+    root: {
+      type: 'sequence',
+      steps: [{ type: 'agent', agent: 'agent-1', id: 'n-1' }],
+    },
+  }
+}
 
 export const codeReviewLoop: WorkflowSpec = {
   name: 'code-review-loop',
@@ -46,8 +64,19 @@ export const codeReviewLoop: WorkflowSpec = {
     type: 'sequence',
     steps: [
       { type: 'agent', agent: 'reviewer', id: 'n-review' },
-      { type: 'fanout', agent: 'investigator', cap: 8, id: 'n-investigate', reads: ['n-review'] },
-      { type: 'agent', agent: 'synthesizer', id: 'n-synthesize', reads: ['n-investigate'] },
+      {
+        type: 'fanout',
+        agent: 'investigator',
+        cap: 8,
+        id: 'n-investigate',
+        reads: ['n-review'],
+      },
+      {
+        type: 'agent',
+        agent: 'synthesizer',
+        id: 'n-synthesize',
+        reads: ['n-investigate'],
+      },
     ],
   },
 }

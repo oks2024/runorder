@@ -39,7 +39,9 @@ describe('LibraryMenu', () => {
     const user = userEvent.setup()
     render(<LibraryMenu />)
     await openMenu(user)
-    await user.click(await screen.findByRole('menuitem', { name: /other-flow/ }))
+    await user.click(
+      await screen.findByRole('menuitem', { name: /other-flow/ }),
+    )
     expect(useWorkflowStore.getState().spec.name).toBe('other-flow')
   })
 
@@ -47,7 +49,9 @@ describe('LibraryMenu', () => {
     const user = userEvent.setup()
     render(<LibraryMenu />)
     await openMenu(user)
-    await user.click(await screen.findByRole('menuitem', { name: /Export JSON/ }))
+    await user.click(
+      await screen.findByRole('menuitem', { name: /Export JSON/ }),
+    )
     expect(vi.mocked(downloadText)).toHaveBeenCalledWith(
       'code-review-loop.json',
       expect.stringContaining('"prewire"'),
@@ -62,11 +66,53 @@ describe('LibraryMenu', () => {
     const user = userEvent.setup()
     render(<LibraryMenu />)
     await openMenu(user)
-    await user.click(await screen.findByRole('menuitem', { name: /Import JSON/ }))
+    await user.click(
+      await screen.findByRole('menuitem', { name: /Import JSON/ }),
+    )
 
     // The collision confirmation appears instead of silently overwriting.
     expect(await screen.findByText(/already exists/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Update/ })).toBeInTheDocument()
+  })
+
+  it('New workflow replaces an untouched seed without confirmation', async () => {
+    const user = userEvent.setup()
+    render(<LibraryMenu />)
+    await openMenu(user)
+    await user.click(
+      await screen.findByRole('menuitem', { name: /New workflow/ }),
+    )
+    expect(useWorkflowStore.getState().spec.name).toBe('untitled')
+  })
+
+  it('New workflow warns when the live doc has unsaved changes; confirming discards them', async () => {
+    useWorkflowStore.getState().setName('my-flow') // edited + never saved = dirty
+    const user = userEvent.setup()
+    render(<LibraryMenu />)
+    await openMenu(user)
+    await user.click(
+      await screen.findByRole('menuitem', { name: /New workflow/ }),
+    )
+
+    expect(await screen.findByText(/unsaved changes/i)).toBeInTheDocument()
+    expect(useWorkflowStore.getState().spec.name).toBe('my-flow') // untouched until confirmed
+    await user.click(screen.getByRole('button', { name: /Discard & create/ }))
+    expect(useWorkflowStore.getState().spec.name).toBe('untitled')
+  })
+
+  it('opening a saved workflow over unsaved changes warns first; Cancel keeps the doc', async () => {
+    useLibraryStore.getState().save({ ...codeReviewLoop, name: 'other-flow' })
+    useWorkflowStore.getState().setName('my-flow')
+    const user = userEvent.setup()
+    render(<LibraryMenu />)
+    await openMenu(user)
+    await user.click(
+      await screen.findByRole('menuitem', { name: /other-flow/ }),
+    )
+
+    expect(await screen.findByText(/unsaved changes/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Cancel/ }))
+    expect(useWorkflowStore.getState().spec.name).toBe('my-flow')
   })
 
   it('importing an invalid file surfaces the parse error', async () => {
@@ -74,7 +120,9 @@ describe('LibraryMenu', () => {
     const user = userEvent.setup()
     render(<LibraryMenu />)
     await openMenu(user)
-    await user.click(await screen.findByRole('menuitem', { name: /Import JSON/ }))
+    await user.click(
+      await screen.findByRole('menuitem', { name: /Import JSON/ }),
+    )
     expect(await screen.findByText(/Not valid JSON/)).toBeInTheDocument()
   })
 })
