@@ -54,7 +54,7 @@ describe('LibraryMenu', () => {
     )
     expect(vi.mocked(downloadText)).toHaveBeenCalledWith(
       'code-review-loop.json',
-      expect.stringContaining('"prewire"'),
+      expect.stringContaining('"playsheet"'),
     )
   })
 

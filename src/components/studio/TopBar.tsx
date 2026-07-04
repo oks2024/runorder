@@ -34,6 +34,9 @@ export function TopBar() {
 
   return (
     <div className="flex items-center gap-4 border-b-2 border-ink bg-paper px-6 py-3">
+      <span className="font-mono text-[13px] font-bold tracking-tight text-ink">
+        Playsheet
+      </span>
       <span
         data-testid="doc-label"
         className="font-mono text-[10px] tracking-[0.18em] text-ink-faint uppercase"

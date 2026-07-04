@@ -17,8 +17,8 @@ import { validateSpec } from '@/spec/validate'
 export const FILE_VERSION = 1
 
 /** The exported file envelope. `spec` carries its own `name`. */
-export interface PrewireFile {
-  prewire: number
+export interface PlaysheetFile {
+  playsheet: number
   spec: WorkflowSpec
 }
 
@@ -28,16 +28,16 @@ export type ImportResult =
 
 /** Serialize the live spec to pretty JSON for download. */
 export function serializeSpec(spec: WorkflowSpec): string {
-  const file: PrewireFile = { prewire: FILE_VERSION, spec }
+  const file: PlaysheetFile = { playsheet: FILE_VERSION, spec }
   return JSON.stringify(file, null, 2)
 }
 
 /**
  * Parse + fully validate an imported blob into a loadable spec, or a human-readable error.
  *
- * Accepts either the wrapped envelope (`{ prewire, spec }`) or a bare spec object, so a
- * hand-written or older bare-spec JSON still imports. Never throws — every failure path
- * returns `{ ok: false, error }`.
+ * Accepts the wrapped envelope (`{ playsheet, spec }`, or the pre-rename `{ prewire, spec }`)
+ * as well as a bare spec object, so a hand-written or older JSON still imports. Never throws —
+ * every failure path returns `{ ok: false, error }`.
  */
 export function parseImport(text: string): ImportResult {
   let raw: unknown
@@ -111,9 +111,14 @@ function definedKeys(obj: object): string[] {
   )
 }
 
-/** Peel the `{ prewire, spec }` envelope if present; otherwise treat the value as a bare spec. */
+/** Peel the `{ playsheet, spec }` envelope (or the pre-rename `{ prewire, spec }`) if present; otherwise treat the value as a bare spec. */
 function unwrap(raw: unknown): unknown {
-  if (raw && typeof raw === 'object' && 'spec' in raw && 'prewire' in raw) {
+  if (
+    raw &&
+    typeof raw === 'object' &&
+    'spec' in raw &&
+    ('playsheet' in raw || 'prewire' in raw)
+  ) {
     return (raw as { spec: unknown }).spec
   }
   return raw

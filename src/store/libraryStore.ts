@@ -3,7 +3,7 @@
  *
  * Distinct from `useWorkflowStore`, which holds the single *live* worksheet. This store is the
  * hub for save/open/delete and the landing spot for imports: a workflow's identity is its
- * `spec.name`, which is the entry key here. Persisted under `prewire.library` via Zustand's
+ * `spec.name`, which is the entry key here. Persisted under `playsheet.library` via Zustand's
  * bundled `persist` middleware (no Immer — updates replace the `entries` map wholesale).
  *
  * Opening an entry routes through `useWorkflowStore.load`, the single spec-replace seam, so the
@@ -16,6 +16,7 @@ import { persist } from 'zustand/middleware'
 import type { WorkflowSpec } from '@/spec/schema'
 import { blankSpec, codeReviewLoop } from '@/spec/seed'
 import { specsEqual } from '@/io/persist'
+import { migrateStorageKey } from '@/io/storage'
 import { useWorkflowStore } from './workflowStore'
 
 export interface SavedEntry {
@@ -41,6 +42,8 @@ export interface LibraryState {
    */
   isDirty: (spec: WorkflowSpec) => boolean
 }
+
+migrateStorageKey('prewire.library', 'playsheet.library')
 
 export const useLibraryStore = create<LibraryState>()(
   persist(
@@ -84,7 +87,7 @@ export const useLibraryStore = create<LibraryState>()(
       },
     }),
     {
-      name: 'prewire.library',
+      name: 'playsheet.library',
       version: 1,
       partialize: (s) => ({ entries: s.entries }),
     },
