@@ -17,8 +17,8 @@ export function Shelf() {
         Repertoire
       </div>
       <p className="mx-1 mb-3.5 text-[11px] leading-[1.45] text-ink-faint">
-        Nine shapes, each marked with its proof status. Drag one into the rundown — its
-        handoffs arrive pre-wired.
+        {PATTERN_ORDER.length} shapes, each marked with its proof status. Drag one into the
+        rundown — its handoffs arrive pre-wired.
       </p>
       {PATTERN_ORDER.map((kind) => (
         <PatternCard key={kind} kind={kind} />
