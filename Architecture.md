@@ -18,7 +18,7 @@ The product is **one canonical spec model with projections hanging off it.** Thi
 
 Exports are **one-way**. The model is authoritative; never re-import an edited script.
 
-> **Implementation status (2026-06-20).** This document is the design source of truth; the code now realizes most of it. Built: the canonical model (`src/spec/schema.ts`, `validate.ts`), the Zustand+Immer store (`src/store/workflowStore.ts`), the **prompt emitter** (`src/emit/promptEmitter.ts`), and the form-primary editor (`src/components/editor/`, mockup 7). Still deferred per `MVP.md`: the **graph view** (V1.1) and the **script emitter** (V2). The draft schema below is implemented largely as written (the V1 editor exposes only the `sequence`/`fanout` slice of the full recursive `PatternNode`).
+> **Implementation status (2026-06-20).** This document is the design source of truth; the code now realizes most of it. Built: the canonical model (`src/spec/schema.ts`, `validate.ts`), the Zustand+Immer store (`src/store/workflowStore.ts`), the **prompt emitter** (`src/emit/promptEmitter.ts`), and the form-primary editor (`src/components/editor/`). Still deferred for later versions: the **graph view** (V1.1) and the **script emitter** (V2). The draft schema below is implemented largely as written (the V1 editor exposes only the `sequence`/`fanout` slice of the full recursive `PatternNode`).
 
 ## The two emitters (dual-strategy)
 
@@ -47,7 +47,7 @@ The prompt path is the durable path, so it must be the *most* trustworthy. To ke
 
 Export is **one-way**, and the primary loop is **edit-in-GUI-then-re-export**. Hand-editing the emitted artifact is allowed, but the moment the user does, the GUI no longer reflects what ran — and that's fine; the model was never reconstructed from the artifact.
 
-Validate with a **faithfulness fixture suite**: emit specs through the prompt path and diff the resulting Markdown phase plan against the spec. (Markdown is emitted deterministically from the model, so it snapshots/diffs as cleanly as JSON would.) **Whether Claude treats structured-Markdown as authoritatively as a fenced JSON payload is an empirical unknown — see `OpenQuestions.md`.** Fallback if it drifts: same content wrapped in one fenced block — still *one* representation, never two.
+Validate with a **faithfulness fixture suite**: emit specs through the prompt path and diff the resulting Markdown phase plan against the spec. (Markdown is emitted deterministically from the model, so it snapshots/diffs as cleanly as JSON would.) **Whether Claude treats structured-Markdown as authoritatively as a fenced JSON payload is an empirical unknown.** Fallback if it drifts: same content wrapped in one fenced block — still *one* representation, never two.
 
 ## Editing paradigm — form-primary
 
