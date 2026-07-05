@@ -15,6 +15,10 @@ dist-ssr
 # Claude Code personal settings
 .claude/settings.local.json
 
+# Cloudflare local dev secrets & state
+.dev.vars
+.wrangler/
+
 # Local-only design docs, captured test runs & orchestration state — never published to the repo
 .exarch/
 mockups/

@@ -10,8 +10,8 @@
  * (graph rules Zod can't express — dangling refs, cycles, reads). Both must pass; a file that
  * clears only the first is still not a loadable spec.
  */
-import { workflowSpecSchema, type WorkflowSpec } from '@/spec/schema'
-import { validateSpec } from '@/spec/validate'
+import { workflowSpecSchema, type WorkflowSpec } from '../spec/schema'
+import { validateSpec } from '../spec/validate'
 
 /** On-disk format version. Bump only on a breaking change to the file envelope. */
 export const FILE_VERSION = 1
@@ -47,10 +47,21 @@ export function parseImport(text: string): ImportResult {
   } catch {
     return { ok: false, error: 'Not valid JSON.' }
   }
+  return validateSpecValue(raw)
+}
 
-  const candidate = unwrap(raw)
+/**
+ * Validate an already-parsed value into a loadable spec, or a human-readable error.
+ *
+ * This is the two-stage import pipeline (unwrap envelope → Zod `safeParse` shape/caps →
+ * `validateSpec` graph rules) lifted out of `parseImport` so callers that already hold a
+ * parsed value — a request body decoded by the backend, say — can reuse the exact same
+ * contract (and the exact same error strings) without a JSON round-trip.
+ */
+export function validateSpecValue(candidate: unknown): ImportResult {
+  const unwrapped = unwrap(candidate)
 
-  const parsed = workflowSpecSchema.safeParse(candidate)
+  const parsed = workflowSpecSchema.safeParse(unwrapped)
   if (!parsed.success) {
     return {
       ok: false,

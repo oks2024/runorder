@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   serializeSpec,
   parseImport,
+  validateSpecValue,
   specFilename,
   specsEqual,
   FILE_VERSION,
@@ -70,6 +71,32 @@ describe('persist — parseImport', () => {
     const result = parseImport(serializeSpec(dangling))
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toMatch(/Invalid workflow/)
+  })
+})
+
+describe('persist — validateSpecValue', () => {
+  it('accepts a bare spec object (no envelope)', () => {
+    const result = validateSpecValue(codeReviewLoop)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.spec.name).toBe('code-review-loop')
+  })
+
+  it('accepts an enveloped object and unwraps the spec', () => {
+    const result = validateSpecValue({
+      runorder: FILE_VERSION,
+      spec: codeReviewLoop,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.spec.name).toBe('code-review-loop')
+  })
+
+  it('rejects an invalid object with the same message parseImport gives', () => {
+    const bad = { name: '', caps: {}, agents: [], root: {} }
+    const viaValue = validateSpecValue(bad)
+    const viaParse = parseImport(JSON.stringify(bad))
+    expect(viaValue.ok).toBe(false)
+    expect(viaValue).toEqual(viaParse)
+    if (!viaValue.ok) expect(viaValue.error).toMatch(/Not a valid workflow/)
   })
 })
 

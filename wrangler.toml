@@ -1,0 +1,8 @@
+name = "runorder"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-07-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "runorder"
+database_id = "REPLACE-AFTER-wrangler-d1-create"   # placeholder — local dev (--local/pages dev) never validates it
