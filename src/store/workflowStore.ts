@@ -40,7 +40,7 @@ const BRANCHES_MAX = 8
 const BRANCHES_MIN = 2
 
 /**
- * Fresh-agent role names per pattern — dropping a pattern into the worksheet mints one new
+ * Fresh-agent role names per pattern — dropping a pattern into the rundown mints one new
  * agent per role (no reuse of `spec.agents[0]`), so every phase is authored in isolation.
  * Names are deduped against the existing roster with `-2`, `-3`, … suffixes.
  */
@@ -239,7 +239,7 @@ function buildPatternNode(
  *
  * Rationale: the Studio has no roster pane — agents enter *only* via `insertPattern` (one
  * fresh agent per role). An agent no phase points at is therefore invisible and unreachable
- * forever; shipping such ghost entries would violate "the worksheet is the spec". So GC runs
+ * forever; shipping such ghost entries would violate "the rundown is the spec". So GC runs
  * wherever a reference can be dropped: `removePhase` and the two role setters. (It does NOT
  * run in `addAgent`/`removeAgent`/`updateAgent` — `addAgent` mints an as-yet-unreferenced
  * agent and would be instantly self-defeating; those actions remain for tests/API parity.)
@@ -266,6 +266,7 @@ function mergePersisted(persisted: unknown, current: WorkflowState): WorkflowSta
 }
 
 migrateStorageKey('prewire.live', 'playsheet.live')
+migrateStorageKey('playsheet.live', 'runorder.live')
 
 export const useWorkflowStore = create<WorkflowState>()(
   persist(
@@ -502,7 +503,7 @@ export const useWorkflowStore = create<WorkflowState>()(
       }),
     })),
     {
-      name: 'playsheet.live',
+      name: 'runorder.live',
       version: 1,
       partialize: (s) => ({ spec: s.spec }),
       merge: mergePersisted,

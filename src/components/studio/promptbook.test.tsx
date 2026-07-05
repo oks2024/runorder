@@ -14,16 +14,16 @@ const rowContaining = (text: string) => rows().find((r) => r.textContent?.includ
 beforeEach(() => {
   useWorkflowStore.getState().load() // fresh seed
   useUiStore.setState({
-    view: 'worksheet',
+    view: 'rundown',
     showScript: true,
-    receiptTab: 'script',
+    promptBookTab: 'script',
     draggingPattern: null,
     provHover: null,
     sampleN: 12,
   })
 })
 
-describe('ReceiptColumn — Script tab line rows', () => {
+describe('PromptBook — Script tab line rows', () => {
   it('renders line-numbered rows; ◈ marks only tagged lines (meta name, not phase())', () => {
     render(<App />)
     const all = rows()
@@ -46,7 +46,7 @@ describe('ReceiptColumn — Script tab line rows', () => {
   })
 })
 
-describe('ReceiptColumn — two-way provenance hover', () => {
+describe('PromptBook — two-way provenance hover', () => {
   it('hovering the phase-2 prompt wrapper lights its script line; mouseLeave clears it', () => {
     render(<App />)
     const wrapper = screen.getAllByLabelText('prompt')[1].closest('[data-prov]') as HTMLElement

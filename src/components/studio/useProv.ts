@@ -8,7 +8,7 @@ function keysArray(keys: string | string[] | undefined): string[] {
 }
 
 /**
- * Two-way provenance hover, shared by the worksheet side (fields) and the receipt side
+ * Two-way provenance hover, shared by the rundown side (fields) and the prompt-book side
  * (script lines) — the SAME hook, so "hovering either side lights both" is one code path,
  * not two independently-maintained ones.
  *
@@ -16,7 +16,7 @@ function keysArray(keys: string | string[] | undefined): string[] {
  * script line honestly lights on either of its tagged fields — see the scriptEmitter's `tag`
  * helper, which puts several keys on one line when a line genuinely derives from several
  * fields). `hoverProps` sets `provHover` to this element's FIRST key on enter and clears it on
- * leave; for a multi-key script line that means hovering it lights whichever single worksheet
+ * leave; for a multi-key script line that means hovering it lights whichever single rundown
  * field is listed first (honest, not exhaustive — see the M4 report for why that's acceptable).
  *
  * Subscribes to the DERIVED boolean, not the raw `provHover` string — Zustand's default
@@ -44,7 +44,7 @@ export function useProv(keys: string | string[] | undefined): {
 }
 
 /**
- * The worksheet-side lit highlight (mockup `[data-prov].lit`): a rounded tint using the
+ * The rundown-side lit highlight (mockup `[data-prov].lit`): a rounded tint using the
  * nearest `--phue` custom property in scope. A phase's hue cascades down to every descendant
  * via ordinary CSS inheritance (`PhaseSection` sets `--phue` once on the section element), so
  * fields inside a phase pick it up for free; fields with no phase in scope (the masthead name,

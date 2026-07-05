@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 
 /**
- * A bounded number, edited in place inside a worksheet sentence or the lede (mockup
+ * A bounded number, edited in place inside a rundown sentence or the lede (mockup
  * `.num-token`): a controlled numeric `<input>` in intended-amber. Commits on change; the
  * store clamps to the field's bounds, so the re-rendered value reflects the clamp.
  */

@@ -17,8 +17,8 @@ import { validateSpec } from '@/spec/validate'
 export const FILE_VERSION = 1
 
 /** The exported file envelope. `spec` carries its own `name`. */
-export interface PlaysheetFile {
-  playsheet: number
+export interface RunorderFile {
+  runorder: number
   spec: WorkflowSpec
 }
 
@@ -28,15 +28,16 @@ export type ImportResult =
 
 /** Serialize the live spec to pretty JSON for download. */
 export function serializeSpec(spec: WorkflowSpec): string {
-  const file: PlaysheetFile = { playsheet: FILE_VERSION, spec }
+  const file: RunorderFile = { runorder: FILE_VERSION, spec }
   return JSON.stringify(file, null, 2)
 }
 
 /**
  * Parse + fully validate an imported blob into a loadable spec, or a human-readable error.
  *
- * Accepts the wrapped envelope (`{ playsheet, spec }`, or the pre-rename `{ prewire, spec }`)
- * as well as a bare spec object, so a hand-written or older JSON still imports. Never throws —
+ * Accepts the wrapped envelope (`{ runorder, spec }`, or the pre-rename `{ playsheet, spec }`
+ * / `{ prewire, spec }`) as well as a bare spec object, so a hand-written or older JSON still
+ * imports. Never throws —
  * every failure path returns `{ ok: false, error }`.
  */
 export function parseImport(text: string): ImportResult {
@@ -76,7 +77,7 @@ export function specFilename(spec: WorkflowSpec): string {
 }
 
 /**
- * Structural equality of two specs — the "has the live worksheet diverged from its saved
+ * Structural equality of two specs — the "has the live rundown diverged from its saved
  * entry?" check. Key-order-insensitive and treats `undefined`-valued keys as absent, because
  * one side may have round-tripped through Zod/localStorage and the other may be a literal.
  */
@@ -111,13 +112,13 @@ function definedKeys(obj: object): string[] {
   )
 }
 
-/** Peel the `{ playsheet, spec }` envelope (or the pre-rename `{ prewire, spec }`) if present; otherwise treat the value as a bare spec. */
+/** Peel the `{ runorder, spec }` envelope (or the pre-rename `{ playsheet, spec }` / `{ prewire, spec }`) if present; otherwise treat the value as a bare spec. */
 function unwrap(raw: unknown): unknown {
   if (
     raw &&
     typeof raw === 'object' &&
     'spec' in raw &&
-    ('playsheet' in raw || 'prewire' in raw)
+    ('runorder' in raw || 'playsheet' in raw || 'prewire' in raw)
   ) {
     return (raw as { spec: unknown }).spec
   }

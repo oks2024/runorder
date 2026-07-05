@@ -3,10 +3,10 @@ import { PROV_NAME } from '@/lib/prov'
 import { ProvSpan } from './ProvSpan'
 
 /**
- * The worksheet title: the workflow name as a controlled, edit-in-place input (mockup
+ * The rundown title: the workflow name as a controlled, edit-in-place input (mockup
  * `.mast h1` — mono, 26px, dashed underline on hover). Binds straight to `setName`. Wrapped in
  * a `ProvSpan` (the workflow-level `name` key — no node id, so a spec-level constant) so
- * hovering it lights the `meta.name`/`meta.description` lines in the receipt, and vice versa.
+ * hovering it lights the `meta.name`/`meta.description` lines in the prompt-book, and vice versa.
  */
 export function Masthead() {
   const name = useWorkflowStore((s) => s.spec.name)

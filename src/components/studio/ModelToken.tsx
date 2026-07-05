@@ -21,7 +21,7 @@ function triggerLabel(value: string): string {
 }
 
 /**
- * The model pill, edited in place inside a worksheet sentence (mockup `.model-token`): a
+ * The model pill, edited in place inside a rundown sentence (mockup `.model-token`): a
  * `--phue`-tinted trigger (its own model's family hue; gray for `inherit`) opening the same
  * searchable Claude-family popup as mockup-7 — `inherit` + bundled models + a raw-id escape
  * ("Use raw id …, unverified"). Commits the raw string; alias→canonical resolution is the

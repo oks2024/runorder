@@ -1,21 +1,21 @@
-# Playsheet
+# Runorder
 
 **See and pin your Claude Code workflow before it runs.**
 
-Playsheet is a client-side web app that lets Claude Code users **configure a multi-agent
+Runorder is a client-side web app that lets Claude Code users **configure a multi-agent
 orchestration in a GUI and export it as a Claude Code native "dynamic workflow"** — the
 runtime-executed `.js` orchestration feature (triggered with `ultracode` / "run as a workflow"),
 **not** the standalone Claude Agent SDK.
 
 The point is **visibility and predictability**: which model each subagent uses, how many run,
 and the topology — the things a Claude-written workflow normally hides. You compose the workflow
-in a worksheet-style editor, watch a dry-run rehearsal of what will spawn, and export a script
+in a rundown-style editor, watch a dry-run rehearsal of what will spawn, and export a script
 you review on Claude Code's own approval screen before anything runs.
 
 ## Status
 
 **MVP core implemented; script-first.** The full data path (spec model → state → emitters), the
-Studio editor UI, local save/library, and JSON export/import are built and tested (215 tests;
+Studio editor UI, local save/library, and JSON export/import are built and tested (217 tests;
 typecheck/build clean). Live probe runs against the real dynamic-workflow runtime confirmed that
 per-stage `agent({ model })` routing is enforced and that unknown model ids fail loud — so the
 **script emitter is primary**, with the prompt emitter kept as a durable fallback.
@@ -47,7 +47,7 @@ of truth. Data flows model → state → output:
 | Script emitter — **primary**, runtime-valid `.js`, provenance-tagged lines | `src/emit/scriptEmitter.ts` |
 | Prompt emitter — durable structured-Markdown fallback | `src/emit/promptEmitter.ts` |
 | Shared enforcement predicates (what the script really injects) | `src/emit/plumbing.ts` |
-| Studio UI — worksheet, pattern shelf, rehearsal view, receipt column | `src/components/studio/` |
+| Studio UI — rundown, pattern repertoire, rehearsal view, prompt book | `src/components/studio/` |
 | Pattern vocabulary, memory names, rehearsal derivation, provenance keys | `src/lib/` |
 | Autosave, named library, JSON export/import | `src/io/` |
 

@@ -1,5 +1,5 @@
 /**
- * Per-phase role extraction for the worksheet sentences.
+ * Per-phase role extraction for the rundown sentences.
  *
  * A thin, read-only mapping from a `PatternNode` to its Studio pattern key, its plain kind
  * label (the `.pnum` gutter), and its primary agent ref (used to pick the phase hue). Mirrors
@@ -10,7 +10,7 @@ import type { PatternKey } from '@/lib/patterns'
 import { primaryRef as primaryRefOrNull } from '@/lib/nodeRoles'
 import type { PatternNode } from '@/spec/schema'
 
-/** Any composition node the worksheet renders (everything except a nested sequence). */
+/** Any composition node the rundown renders (everything except a nested sequence). */
 export type EditableNode = Exclude<PatternNode, { type: 'sequence' }>
 
 /** Classify a node into its Studio pattern key (a lead with grants is a delegation). */

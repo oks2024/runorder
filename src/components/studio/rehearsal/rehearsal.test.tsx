@@ -7,9 +7,9 @@ import { useUiStore } from '@/store/uiStore'
 beforeEach(() => {
   useWorkflowStore.getState().load() // fresh seed
   useUiStore.setState({
-    view: 'worksheet',
+    view: 'rundown',
     showScript: true,
-    receiptTab: 'script',
+    promptBookTab: 'script',
     draggingPattern: null,
     provHover: null,
     sampleN: 12,
@@ -21,7 +21,7 @@ function switchToRehearsal() {
 }
 
 describe('Rehearsal view — banner + wiring', () => {
-  it('switching to Rehearsal shows the sampleN=12 seed tally and hides the worksheet', () => {
+  it('switching to Rehearsal shows the sampleN=12 seed tally and hides the rundown', () => {
     render(<App />)
     switchToRehearsal()
 
@@ -112,12 +112,12 @@ describe('Rehearsal view — anatomy card', () => {
     expect(screen.getByTestId('anatomy-header').textContent).not.toContain('#3')
   })
 
-  it('"edit in worksheet" jumps back to the worksheet view', () => {
+  it('"edit in rundown" jumps back to the rundown view', () => {
     render(<App />)
     switchToRehearsal()
 
-    fireEvent.click(screen.getByRole('button', { name: /edit in worksheet/ }))
-    expect(useUiStore.getState().view).toBe('worksheet')
+    fireEvent.click(screen.getByRole('button', { name: /edit in rundown/ }))
+    expect(useUiStore.getState().view).toBe('rundown')
     expect(screen.getByDisplayValue('code-review-loop')).toBeInTheDocument()
   })
 })

@@ -3,7 +3,7 @@ import { useProv, litStyle } from './useProv'
 import { cn } from '@/lib/utils'
 
 /**
- * Wraps a worksheet field with its provenance key(s) (`src/lib/prov.ts`) — the same join the
+ * Wraps a rundown field with its provenance key(s) (`src/lib/prov.ts`) — the same join the
  * emitted script lines carry. Always renders the wrapping element (so callers can hand it the
  * field's *base* styling via `className`, not just an on-hover extra); when `keys` is falsy
  * (an id-less node — shouldn't happen in practice, but never crash the sentence over it) it

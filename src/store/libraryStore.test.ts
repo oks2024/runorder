@@ -43,7 +43,7 @@ describe('libraryStore — save', () => {
 })
 
 describe('libraryStore — open', () => {
-  it('loads a saved entry into the live worksheet via workflowStore.load', () => {
+  it('loads a saved entry into the live rundown via workflowStore.load', () => {
     const other: WorkflowSpec = { ...codeReviewLoop, name: 'other-flow' }
     lib.getState().save(other)
     expect(wf.getState().spec.name).toBe('code-review-loop')

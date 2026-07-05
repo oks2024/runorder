@@ -51,7 +51,7 @@ function promptRoles(node: EditableNode): Array<{ ref: string; role?: string }> 
 }
 
 /**
- * One numbered phase of the worksheet (mockup `.phase`): a left `.pnum` gutter (number, kind
+ * One numbered phase of the rundown (mockup `.phase`): a left `.pnum` gutter (number, kind
  * label, per-phase model hue on its right border, hover-reveal remove) and a body of the
  * edit-in-place sentence, the prompt block(s), and the flow note. The phase hue is the
  * primary agent's model family.

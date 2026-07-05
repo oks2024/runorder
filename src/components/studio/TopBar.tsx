@@ -10,9 +10,9 @@ import { LibraryMenu } from './LibraryMenu'
 
 /**
  * The Studio top bar (mockup `.top`): doc label + workflow name (display), the
- * Worksheet⇄Rehearsal switch (rehearsal disabled until M3), the receipt toggle with its LED,
- * a live validity/estimate status pill (derived every render), and Copy emit (copies the
- * active receipt tab — the script when the column is closed).
+ * Rundown⇄Rehearsal switch (rehearsal disabled until M3), the prompt-book toggle with its LED,
+ * a live validity/estimate status pill (derived every render), and Copy script (copies the
+ * active prompt-book tab — the script when the column is closed).
  */
 export function TopBar() {
   const spec = useWorkflowStore((s) => s.spec)
@@ -20,7 +20,7 @@ export function TopBar() {
   const setView = useUiStore((s) => s.setView)
   const showScript = useUiStore((s) => s.showScript)
   const setShowScript = useUiStore((s) => s.setShowScript)
-  const receiptTab = useUiStore((s) => s.receiptTab)
+  const promptBookTab = useUiStore((s) => s.promptBookTab)
   const [copied, copy] = useCopy()
 
   const result = validateSpec(spec)
@@ -28,20 +28,20 @@ export function TopBar() {
   const rehearsing = view === 'rehearsal'
 
   const copyActive = () => {
-    const useScript = !showScript || receiptTab === 'script'
+    const useScript = !showScript || promptBookTab === 'script'
     copy(useScript ? emitScript(spec) : emitPrompt(spec))
   }
 
   return (
     <div className="flex items-center gap-4 border-b-2 border-ink bg-paper px-6 py-3">
       <span className="font-mono text-[13px] font-bold tracking-tight text-ink">
-        Playsheet
+        Runorder
       </span>
       <span
         data-testid="doc-label"
         className="font-mono text-[10px] tracking-[0.18em] text-ink-faint uppercase"
       >
-        {rehearsing ? 'Rehearsal' : 'Worksheet'}
+        {rehearsing ? 'Rehearsal' : 'Rundown'}
       </span>
       <span className="font-mono text-[15px] font-semibold text-ink">{spec.name}</span>
       <div className="flex-1" />
@@ -50,13 +50,13 @@ export function TopBar() {
         <button
           role="tab"
           aria-selected={!rehearsing}
-          onClick={() => setView('worksheet')}
+          onClick={() => setView('rundown')}
           className={cn(
             'px-4 py-1.5 font-mono text-[11.5px]',
             !rehearsing ? 'bg-ink font-medium text-paper' : 'text-ink-faint hover:text-ink',
           )}
         >
-          Worksheet
+          Rundown
         </button>
         <button
           role="tab"
@@ -111,7 +111,7 @@ export function TopBar() {
           copied && 'border-enforced bg-enforced',
         )}
       >
-        {copied ? '✓ Copied' : 'Copy emit'}
+        {copied ? '✓ Copied' : 'Copy script'}
       </button>
     </div>
   )

@@ -169,7 +169,7 @@
   html {
     @apply font-sans;
   }
-  /* Numeric worksheet tokens size themselves in `ch`; Chrome's inner spin buttons would
+  /* Numeric rundown tokens size themselves in `ch`; Chrome's inner spin buttons would
      otherwise reserve layout space inside that width and clip the digits. */
   input[type='number']::-webkit-outer-spin-button,
   input[type='number']::-webkit-inner-spin-button {

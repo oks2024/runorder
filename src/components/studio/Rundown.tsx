@@ -7,14 +7,14 @@ import { Seam } from './Seam'
 import { DropEnd } from './DropEnd'
 
 /**
- * The worksheet document (mockup `.sheet-scroll` / `.sheet`): a light literate spec — the
+ * The rundown document (mockup `.sheet-scroll` / `.sheet`): a light literate spec — the
  * masthead, the caps lede, one `PhaseSection` per root step (interleaved with drop `Seam`s so
  * a dragged pattern can be inserted anywhere, including before phase 1), a trailing `DropEnd`
  * to append, and a closing colophon. A non-sequence root or a nested-sequence step renders a
  * "flatten it" notice rather than crashing — the same honesty as the emitter, which throws on
  * those.
  */
-export function Worksheet() {
+export function Rundown() {
   const spec = useWorkflowStore((s) => s.spec)
   const root = spec.root
   const isSequence = root.type === 'sequence'
@@ -28,7 +28,7 @@ export function Worksheet() {
 
         {!isSequence ? (
           <p className="mt-8 rounded-lg border border-danger/40 bg-danger/5 px-4 py-3 text-[13px] text-danger">
-            This workflow's root is a <code>{spec.root.type}</code>, not a sequence. The worksheet
+            This workflow's root is a <code>{spec.root.type}</code>, not a sequence. The rundown
             edits a flat, ordered phase list — flatten the root to a sequence to work on it here.
           </p>
         ) : (
@@ -57,7 +57,7 @@ export function Worksheet() {
         )}
 
         <p className="mt-14 max-w-[52ch] border-t border-rule pt-3.5 text-[12.5px] text-ink-faint">
-          This worksheet is the spec; the script beside it is the receipt — the exact code that
+          This rundown is the spec; the script beside it is the prompt book — the exact code that
           will run. Switch to Rehearsal for a read-only dry-run of this page.
         </p>
       </main>

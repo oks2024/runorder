@@ -34,7 +34,7 @@ describe('LibraryMenu', () => {
     expect(useLibraryStore.getState().has('code-review-loop')).toBe(true)
   })
 
-  it('clicking a saved name opens it into the live worksheet', async () => {
+  it('clicking a saved name opens it into the live rundown', async () => {
     useLibraryStore.getState().save({ ...codeReviewLoop, name: 'other-flow' })
     const user = userEvent.setup()
     render(<LibraryMenu />)
@@ -54,7 +54,7 @@ describe('LibraryMenu', () => {
     )
     expect(vi.mocked(downloadText)).toHaveBeenCalledWith(
       'code-review-loop.json',
-      expect.stringContaining('"playsheet"'),
+      expect.stringContaining('"runorder"'),
     )
   })
 

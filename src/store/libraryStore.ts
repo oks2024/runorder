@@ -1,13 +1,13 @@
 /**
  * Named library — the local collection of saved workflows (localStorage-backed).
  *
- * Distinct from `useWorkflowStore`, which holds the single *live* worksheet. This store is the
+ * Distinct from `useWorkflowStore`, which holds the single *live* rundown. This store is the
  * hub for save/open/delete and the landing spot for imports: a workflow's identity is its
- * `spec.name`, which is the entry key here. Persisted under `playsheet.library` via Zustand's
+ * `spec.name`, which is the entry key here. Persisted under `runorder.library` via Zustand's
  * bundled `persist` middleware (no Immer — updates replace the `entries` map wholesale).
  *
  * Opening an entry routes through `useWorkflowStore.load`, the single spec-replace seam, so the
- * live worksheet is always adopted (deep-cloned) the same way whether it comes from the library,
+ * live rundown is always adopted (deep-cloned) the same way whether it comes from the library,
  * a file import, or a reseed. Specs are trusted on the way in: `save` is only called with a spec
  * that is already live-and-valid (from the store) or freshly `parseImport`-validated.
  */
@@ -33,17 +33,18 @@ export interface LibraryState {
   has: (name: string) => boolean
   /** Upsert the spec under its own `spec.name` (deep-cloned; `savedAt` stamped now). */
   save: (spec: WorkflowSpec) => void
-  /** Load a saved entry into the live worksheet; no-op if the name is unknown. */
+  /** Load a saved entry into the live rundown; no-op if the name is unknown. */
   open: (name: string) => void
   remove: (name: string) => void
   /**
-   * Would replacing the live worksheet lose work? True when `spec` differs from its library
+   * Would replacing the live rundown lose work? True when `spec` differs from its library
    * entry — or, if it was never saved, from the untouched seed/blank starting points.
    */
   isDirty: (spec: WorkflowSpec) => boolean
 }
 
 migrateStorageKey('prewire.library', 'playsheet.library')
+migrateStorageKey('playsheet.library', 'runorder.library')
 
 export const useLibraryStore = create<LibraryState>()(
   persist(
@@ -87,7 +88,7 @@ export const useLibraryStore = create<LibraryState>()(
       },
     }),
     {
-      name: 'playsheet.library',
+      name: 'runorder.library',
       version: 1,
       partialize: (s) => ({ entries: s.entries }),
     },

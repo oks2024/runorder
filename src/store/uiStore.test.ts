@@ -11,10 +11,10 @@ beforeEach(() => {
 })
 
 describe('uiStore — defaults', () => {
-  it('starts on the worksheet view with the script receipt open', () => {
-    expect(state().view).toBe('worksheet')
+  it('starts on the rundown view with the script prompt-book open', () => {
+    expect(state().view).toBe('rundown')
     expect(state().showScript).toBe(true)
-    expect(state().receiptTab).toBe('script')
+    expect(state().promptBookTab).toBe('script')
     expect(state().draggingPattern).toBeNull()
     expect(state().provHover).toBeNull()
     expect(state().sampleN).toBe(12)
@@ -27,14 +27,14 @@ describe('uiStore — setters', () => {
     expect(state().view).toBe('rehearsal')
   })
 
-  it('toggles the receipt column', () => {
+  it('toggles the prompt-book column', () => {
     state().setShowScript(false)
     expect(state().showScript).toBe(false)
   })
 
-  it('switches the receipt tab', () => {
-    state().setReceiptTab('prompt')
-    expect(state().receiptTab).toBe('prompt')
+  it('switches the prompt-book tab', () => {
+    state().setPromptBookTab('prompt')
+    expect(state().promptBookTab).toBe('prompt')
   })
 
   it('tracks the dragging pattern', () => {

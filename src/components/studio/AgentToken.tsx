@@ -4,7 +4,7 @@ import type { Agent } from '@/spec/schema'
 import { shortModel } from './hue'
 
 /**
- * An agent's name, edited in place inside a worksheet sentence (mockup `.agent-token`): a
+ * An agent's name, edited in place inside a rundown sentence (mockup `.agent-token`): a
  * controlled `<input>` sized by `ch` from the value. A dangling ref (no matching agent)
  * renders as a non-editable danger token showing the raw ref — never crashes the sentence.
  *

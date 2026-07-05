@@ -65,7 +65,7 @@ export const PATTERN_NAME: Record<PatternKey, string> = {
 }
 
 /** `dataTransfer` MIME type carrying the dragged pattern kind from the shelf to a drop zone. */
-export const PATTERN_DND_MIME = 'application/x-playsheet-pattern'
+export const PATTERN_DND_MIME = 'application/x-runorder-pattern'
 
 export const PATTERN_INFO: Record<PatternKey, PatternInfo> = {
   step: {

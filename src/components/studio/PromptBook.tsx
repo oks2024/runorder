@@ -15,7 +15,7 @@ import type { WorkflowSpec } from '@/spec/schema'
 
 /**
  * Phase index → the phase's PRIMARY agent's model-family hue. Mirrors `PhaseSection`'s
- * `--phue` (its primary agent's model family), computed once here since the receipt column has
+ * `--phue` (its primary agent's model family), computed once here since the prompt-book column has
  * no phase DOM of its own to inherit the CSS var from.
  */
 function phaseHues(spec: WorkflowSpec): string[] {
@@ -29,8 +29,8 @@ function phaseHues(spec: WorkflowSpec): string[] {
 
 /**
  * One emitted line (mockup `.eline`): line number · ◈ gutter mark when tagged · tinted text.
- * Lights via the SAME `useProv` hook the worksheet fields use — hovering a line sets
- * `provHover` to its first provenance key, exactly like hovering the worksheet field does; a
+ * Lights via the SAME `useProv` hook the rundown fields use — hovering a line sets
+ * `provHover` to its first provenance key, exactly like hovering the rundown field does; a
  * line lights when the hovered key is ANY of its own (a line can honestly carry several keys).
  */
 function ScriptLine({ line, no, hue }: { line: EmitLine; no: number; hue?: string }) {
@@ -68,16 +68,16 @@ function ScriptLine({ line, no, hue }: { line: EmitLine; no: number; hue?: strin
 }
 
 /**
- * The receipt column (mockup `.script`): a togglable pane showing the live emitted artifact —
+ * The prompt-book column (mockup `.script`): a togglable pane showing the live emitted artifact —
  * Script (runtime-valid `.js`, per-line two-way provenance) or Prompt (structured-Markdown
  * fallback, a plain `<pre>` — no provenance hover, per the M4 scope: the prompt path isn't the
  * enforced one). Width animates to zero when closed.
  */
-export function ReceiptColumn() {
+export function PromptBook() {
   const spec = useWorkflowStore((s) => s.spec)
   const showScript = useUiStore((s) => s.showScript)
-  const receiptTab = useUiStore((s) => s.receiptTab)
-  const setReceiptTab = useUiStore((s) => s.setReceiptTab)
+  const promptBookTab = useUiStore((s) => s.promptBookTab)
+  const setPromptBookTab = useUiStore((s) => s.setPromptBookTab)
 
   const lines = useMemo(() => emitScriptLines(spec), [spec])
   const hues = useMemo(() => phaseHues(spec), [spec])
@@ -92,18 +92,18 @@ export function ReceiptColumn() {
       <div className="flex min-h-0 min-w-[460px] flex-1 flex-col">
         <div className="flex items-baseline gap-2.5 px-5 pt-4 pb-2.5">
           <span className="font-mono text-[10px] tracking-[0.16em] text-ink-dim uppercase">
-            The receipt — what will run
+            The prompt book — exactly what will run
           </span>
         </div>
 
         <div className="flex gap-0.5 px-4" role="tablist" aria-label="Artifact projection">
           <button
             role="tab"
-            aria-selected={receiptTab === 'script'}
-            onClick={() => setReceiptTab('script')}
+            aria-selected={promptBookTab === 'script'}
+            onClick={() => setPromptBookTab('script')}
             className={cn(
               'rounded-t-md border px-2.5 py-1 font-mono text-[11px]',
-              receiptTab === 'script'
+              promptBookTab === 'script'
                 ? 'border-rule-soft border-b-transparent bg-paper text-ink'
                 : 'border-transparent text-ink-faint hover:text-ink-dim',
             )}
@@ -112,11 +112,11 @@ export function ReceiptColumn() {
           </button>
           <button
             role="tab"
-            aria-selected={receiptTab === 'prompt'}
-            onClick={() => setReceiptTab('prompt')}
+            aria-selected={promptBookTab === 'prompt'}
+            onClick={() => setPromptBookTab('prompt')}
             className={cn(
               'rounded-t-md border px-2.5 py-1 font-mono text-[11px]',
-              receiptTab === 'prompt'
+              promptBookTab === 'prompt'
                 ? 'border-rule-soft border-b-transparent bg-paper text-ink'
                 : 'border-transparent text-ink-faint hover:text-ink-dim',
             )}
@@ -125,7 +125,7 @@ export function ReceiptColumn() {
           </button>
         </div>
 
-        {receiptTab === 'script' ? (
+        {promptBookTab === 'script' ? (
           <div
             data-testid="script-body"
             className="min-h-0 flex-1 overflow-auto border-t border-rule-soft bg-paper py-1 pb-6"
@@ -154,8 +154,8 @@ export function ReceiptColumn() {
         )}
 
         <div className="border-t border-rule-soft px-5 py-2.5 font-mono text-[9.5px] leading-relaxed text-ink-faint">
-          {receiptTab === 'script'
-            ? '◈ every marked line traces to exactly one thing on the worksheet — hover either side. Nothing in this script comes from anywhere else.'
+          {promptBookTab === 'script'
+            ? '◈ every marked line traces to exactly one thing on the rundown — hover either side. Nothing in this script comes from anywhere else.'
             : 'Durable structured-Markdown fallback. Claude authors the orchestration here, so the model pin is a request, not a guarantee.'}
         </div>
       </div>

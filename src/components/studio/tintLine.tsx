@@ -71,7 +71,7 @@ export function tintSegments(text: string): TintSeg[] {
   }
   if (quote) {
     // Unterminated string literal (shouldn't happen in valid emitted JS, but never crash the
-    // receipt column over it) — treat whatever's left as string content.
+    // prompt-book column over it) — treat whatever's left as string content.
     if (buf) segs.push({ kind: 'str', text: buf })
   } else {
     tagKeywords(buf, segs)

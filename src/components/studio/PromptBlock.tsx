@@ -11,7 +11,7 @@ import type { Agent } from '@/spec/schema'
  * kicker ("prompt", or "prompt — reducer" for a role in a two-agent phase). Autosizes via
  * `field-sizing: content` with a scrollHeight effect as the fallback for engines without it.
  * `field`/`nodeId` (the phase's primary vs. secondary prompt) key it to the exact script
- * line(s) the emitter tagged with `prompt`/`prompt2` — the two-way hover with the receipt.
+ * line(s) the emitter tagged with `prompt`/`prompt2` — the two-way hover with the prompt-book.
  */
 export function PromptBlock({
   agent,

@@ -21,7 +21,7 @@ const mem = 'rounded-[4px] border border-rule-soft bg-paper-2 px-1.5 font-mono t
  * appears only where the script enforces the claim: next to a pinned model, and next to the
  * literal cap/iters/angles/grant-cap numbers (guardrail #5). Each of those tokens is also
  * wrapped in a `ProvSpan` keyed to the exact field the emitter tagged on its line(s) — the
- * two-way hover between this sentence and the receipt column.
+ * two-way hover between this sentence and the prompt-book column.
  */
 export function PhaseSentence({
   node,
@@ -159,7 +159,7 @@ export function PhaseSentence({
         return (
           <p className={`${pline} text-danger`}>
             This loop wraps a <code>{node.body.type}</code> body — V1 loops must wrap a single
-            agent. Flatten it in the worksheet.
+            agent. Flatten it in the rundown.
           </p>
         )
       }

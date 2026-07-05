@@ -12,7 +12,7 @@ import type { WorkflowSpec } from '@/spec/schema'
 describe('persist — serializeSpec', () => {
   it('wraps the spec in a versioned envelope with the name inside the spec', () => {
     const parsed = JSON.parse(serializeSpec(codeReviewLoop))
-    expect(parsed.playsheet).toBe(FILE_VERSION)
+    expect(parsed.runorder).toBe(FILE_VERSION)
     expect(parsed.spec.name).toBe('code-review-loop')
   })
 
@@ -37,6 +37,13 @@ describe('persist — parseImport', () => {
     if (result.ok) expect(result.spec.name).toBe('code-review-loop')
   })
 
+  it('accepts the pre-rename { playsheet, spec } envelope', () => {
+    const legacy = JSON.stringify({ playsheet: 1, spec: codeReviewLoop })
+    const result = parseImport(legacy)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.spec.name).toBe('code-review-loop')
+  })
+
   it('rejects non-JSON with a clear message', () => {
     const result = parseImport('{ not json')
     expect(result).toEqual({ ok: false, error: 'Not valid JSON.' })
@@ -44,7 +51,7 @@ describe('persist — parseImport', () => {
 
   it('rejects a shape-invalid spec (fails Zod)', () => {
     const bad = {
-      playsheet: 1,
+      runorder: 1,
       spec: { name: '', caps: {}, agents: [], root: {} },
     }
     const result = parseImport(JSON.stringify(bad))

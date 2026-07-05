@@ -99,7 +99,7 @@ function Segment({ seg }: { seg: ReceiveSegment }) {
 
 /**
  * The anatomy card (mockup `.anatomy`): "exactly what it receives" for the currently-selected
- * swarm worker — its `receives` segments in order, plus an "edit in worksheet ▸" jump back to
+ * swarm worker — its `receives` segments in order, plus an "edit in rundown ▸" jump back to
  * the phase that produced it (by DOM id `phase-{nodeId}`, set on `PhaseSection`).
  */
 export function AnatomyCard({
@@ -111,8 +111,8 @@ export function AnatomyCard({
 }) {
   const setView = useUiStore((s) => s.setView)
 
-  const editInWorksheet = () => {
-    setView('worksheet')
+  const editInRundown = () => {
+    setView('rundown')
     if (!nodeId) return
     requestAnimationFrame(() => {
       document.getElementById(`phase-${nodeId}`)?.scrollIntoView({ block: 'center' })
@@ -135,11 +135,11 @@ export function AnatomyCard({
         </span>
         <button
           type="button"
-          onClick={editInWorksheet}
+          onClick={editInRundown}
           className="ml-auto rounded-md px-2.5 py-[3px] font-mono text-[10.5px] text-sonnet"
           style={{ border: '1px solid color-mix(in oklch, var(--color-sonnet) 35%, var(--color-rule))' }}
         >
-          edit in worksheet ▸
+          edit in rundown ▸
         </button>
       </div>
       <div className="px-4 pt-3.5 pb-4 text-[13px] leading-[1.6]">

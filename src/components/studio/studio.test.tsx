@@ -18,7 +18,7 @@ function stubDataTransfer(kind?: string) {
   }
 }
 
-// The receipt column defaults to the Script projection, now rendered as one row per emitted
+// The prompt-book column defaults to the Script projection, now rendered as one row per emitted
 // line (M4 provenance) rather than one big `<pre>` text node — `.textContent` still
 // aggregates every row's text, so substring assertions below are unaffected.
 const script = () => screen.getByTestId('script-body')
@@ -28,9 +28,9 @@ const writeText = vi.fn().mockResolvedValue(undefined)
 beforeEach(() => {
   useWorkflowStore.getState().load() // fresh seed
   useUiStore.setState({
-    view: 'worksheet',
+    view: 'rundown',
     showScript: true,
-    receiptTab: 'script',
+    promptBookTab: 'script',
     draggingPattern: null,
     provHover: null,
     sampleN: 12,
@@ -39,12 +39,12 @@ beforeEach(() => {
   Object.assign(navigator, { clipboard: { writeText } })
 })
 
-describe('Studio worksheet — store-bound behavior', () => {
+describe('Studio rundown — store-bound behavior', () => {
   it('renders the seed: masthead, three numbered phases, agents, models, caps', () => {
     render(<App />)
     expect(screen.getByDisplayValue('code-review-loop')).toBeInTheDocument()
 
-    // kind labels in the pnum gutter (scoped to the worksheet — the shelf also has cards
+    // kind labels in the pnum gutter (scoped to the rundown — the shelf also has cards
     // named "step"/"fan-out")
     const main = within(screen.getByRole('main'))
     expect(main.getAllByText('step')).toHaveLength(2)
@@ -83,7 +83,7 @@ describe('Studio worksheet — store-bound behavior', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Prompt' }))
     expect(screen.getByText(/# Workflow: code-review-loop/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy emit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy script' }))
     await waitFor(() => expect(screen.getByText('✓ Copied')).toBeInTheDocument())
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining('# Workflow: code-review-loop'),
@@ -145,14 +145,14 @@ describe('Studio worksheet — store-bound behavior', () => {
 describe('Studio pattern shelf — drag-to-insert', () => {
   it('renders all ten pattern cards with names, use-lines, and honest proof chips', () => {
     render(<App />)
-    const shelf = screen.getByLabelText('Pattern playbook')
+    const shelf = screen.getByLabelText('Pattern repertoire')
     for (const kind of PATTERN_ORDER) {
       expect(within(shelf).getByText(PATTERN_NAME[kind])).toBeInTheDocument()
       expect(within(shelf).getByText(PATTERN_INFO[kind].use)).toBeInTheDocument()
     }
     // proven patterns wear the green chip; refine + verify + branches honestly wear the amber one
-    expect(within(shelf).getAllByText('run-proven')).toHaveLength(7)
-    expect(within(shelf).getAllByText('not yet run-proven')).toHaveLength(3)
+    expect(within(shelf).getAllByText('in rep')).toHaveLength(7)
+    expect(within(shelf).getAllByText('not yet in rep')).toHaveLength(3)
   })
 
   it('a branches phase renders one token per branch and can add/remove branches', () => {
@@ -229,7 +229,7 @@ describe('Studio pattern shelf — drag-to-insert', () => {
       expect(root.steps).toHaveLength(4)
       expect(root.steps[1].type).toBe('iterateUntil')
     }
-    // scoped to the worksheet — the shelf also has a card named "loop"
+    // scoped to the rundown — the shelf also has a card named "loop"
     expect(within(screen.getByRole('main')).getAllByText('loop')).toHaveLength(1)
     expect(useUiStore.getState().draggingPattern).toBeNull()
   })

@@ -32,7 +32,7 @@ type DialogState =
   | null
 
 /**
- * The save/export/import hub in the top bar (mockup neighbor of "Copy emit"). A single dropdown
+ * The save/export/import hub in the top bar (mockup neighbor of "Copy script"). A single dropdown
  * over the named library (`libraryStore`) plus JSON file I/O; all spec replacement routes through
  * `useWorkflowStore.load` via `library.open`. Overwrite / import-update / delete are confirmed in
  * a modal (Studio paper theme), and import failures surface their `parseImport` error message.
@@ -50,10 +50,10 @@ export function LibraryMenu() {
   const [dialog, setDialog] = useState<DialogState>(null)
   const names = Object.keys(entries).sort((a, b) => a.localeCompare(b))
 
-  /** The unsaved-changes warning, when replacing the live worksheet would lose work. */
+  /** The unsaved-changes warning, when replacing the live rundown would lose work. */
   const dirtyWarning = () =>
     isDirty(spec)
-      ? `The worksheet “${spec.name}” has unsaved changes that will be lost.`
+      ? `The rundown “${spec.name}” has unsaved changes that will be lost.`
       : null
 
   /** Run `action` immediately, or behind a discard confirmation if the live doc is dirty. */

@@ -1,13 +1,13 @@
 import { useUiStore } from '@/store/uiStore'
 import { TopBar } from './TopBar'
 import { Shelf } from './Shelf'
-import { Worksheet } from './Worksheet'
-import { ReceiptColumn } from './ReceiptColumn'
+import { Rundown } from './Rundown'
+import { PromptBook } from './PromptBook'
 import { Rehearsal } from './rehearsal/Rehearsal'
 
 /**
- * The Studio shell (mockup `.app`): the top bar over a body of either the worksheet (pattern
- * shelf + document + optional receipt column) or, in rehearsal view, the read-only `Rehearsal`
+ * The Studio shell (mockup `.app`): the top bar over a body of either the rundown (pattern
+ * shelf + document + optional prompt-book column) or, in rehearsal view, the read-only `Rehearsal`
  * dry-run — the two bodies are mutually exclusive (mockup `.app.rehearsing .studio { display:
  * none }`), not stacked.
  */
@@ -22,8 +22,8 @@ export function StudioApp() {
       ) : (
         <div className="flex min-h-0 flex-1">
           <Shelf />
-          <Worksheet />
-          <ReceiptColumn />
+          <Rundown />
+          <PromptBook />
         </div>
       )}
     </div>

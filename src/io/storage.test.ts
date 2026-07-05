@@ -25,4 +25,13 @@ describe('storage — migrateStorageKey', () => {
     migrateStorageKey('prewire.live', 'playsheet.live')
     expect(localStorage.getItem('playsheet.live')).toBeNull()
   })
+
+  it('chains prewire → playsheet → runorder in call order', () => {
+    localStorage.setItem('prewire.live', '{"spec":1}')
+    migrateStorageKey('prewire.live', 'playsheet.live')
+    migrateStorageKey('playsheet.live', 'runorder.live')
+    expect(localStorage.getItem('runorder.live')).toBe('{"spec":1}')
+    expect(localStorage.getItem('playsheet.live')).toBeNull()
+    expect(localStorage.getItem('prewire.live')).toBeNull()
+  })
 })

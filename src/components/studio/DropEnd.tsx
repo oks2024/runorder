@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils'
 
 /**
  * The append drop zone after the last phase (mockup `.drop-end`): a dashed rounded well that
- * always accepts a dropped (or clicked) pattern at the end of the worksheet. When the
- * worksheet has no phases at all, it doubles as the empty-state message. Same hot/idempotent
+ * always accepts a dropped (or clicked) pattern at the end of the rundown. When the
+ * rundown has no phases at all, it doubles as the empty-state message. Same hot/idempotent
  * drop wiring as `Seam`.
  */
 export function DropEnd({ index, empty }: { index: number; empty: boolean }) {
@@ -50,10 +50,10 @@ export function DropEnd({ index, empty }: { index: number; empty: boolean }) {
       )}
     >
       {empty ? (
-        <>drag a pattern from the playbook to start</>
+        <>drag a pattern from the repertoire to start</>
       ) : (
         <>
-          ＋ drag a pattern from the <b className="font-semibold">playbook</b> — its inputs wire
+          ＋ drag a pattern from the <b className="font-semibold">repertoire</b> — its inputs wire
           to the phase above
         </>
       )}
