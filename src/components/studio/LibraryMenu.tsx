@@ -9,9 +9,15 @@ import {
   Upload,
   Trash2,
   ChevronDown,
+  CloudUpload,
+  Globe,
+  Lock,
+  LogIn,
 } from 'lucide-react'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { useLibraryStore } from '@/store/libraryStore'
+import { useAuthStore } from '@/store/authStore'
+import { useCloudStore } from '@/store/cloudStore'
 import { blankSpec } from '@/spec/seed'
 import { serializeSpec, specFilename, parseImport } from '@/io/persist'
 import { downloadText, readFileText } from '@/io/download'
@@ -27,7 +33,7 @@ type DialogState =
       danger?: boolean
       onConfirm: () => void
     }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; title?: string }
   | { kind: 'manage' }
   | null
 
@@ -46,6 +52,13 @@ export function LibraryMenu() {
   const open = useLibraryStore((s) => s.open)
   const remove = useLibraryStore((s) => s.remove)
   const isDirty = useLibraryStore((s) => s.isDirty)
+
+  const signedIn = useAuthStore((s) => s.user != null)
+  const signIn = useAuthStore((s) => s.signIn)
+  const cloudItems = useCloudStore((s) => s.items)
+  const saveToCloud = useCloudStore((s) => s.saveToCloud)
+  const openFromCloud = useCloudStore((s) => s.openFromCloud)
+  const removeFromCloud = useCloudStore((s) => s.remove)
 
   const [dialog, setDialog] = useState<DialogState>(null)
   const names = Object.keys(entries).sort((a, b) => a.localeCompare(b))
@@ -144,6 +157,52 @@ export function LibraryMenu() {
     }
   }
 
+  // --- cloud actions ---
+
+  /** Open a cloud workflow into the live rundown, guarding unsaved work; errors → error modal. */
+  const doOpenCloud = (id: string) =>
+    guardUnsaved('Discard & open', async () => {
+      const result = await openFromCloud(id)
+      if (!result.ok) {
+        setDialog({
+          kind: 'error',
+          title: 'Could not open',
+          message: result.error,
+        })
+      }
+    })
+
+  /** Upsert the live spec to the cloud (server upserts by name — no collision confirm). */
+  const doSaveToCloud = async () => {
+    const result = await saveToCloud(spec)
+    if (!result.ok) {
+      setDialog({
+        kind: 'error',
+        title: 'Could not save to cloud',
+        message: result.error,
+      })
+    }
+  }
+
+  /** Delete a cloud workflow after a confirmation; errors → error modal. */
+  const confirmRemoveCloud = (id: string, name: string) =>
+    setDialog({
+      kind: 'confirm',
+      message: `Delete the cloud workflow “${name}”? This removes it from your account and cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+      onConfirm: async () => {
+        const result = await removeFromCloud(id)
+        if (!result.ok) {
+          setDialog({
+            kind: 'error',
+            title: 'Could not delete',
+            message: result.error,
+          })
+        }
+      },
+    })
+
   // --- render ---
 
   return (
@@ -191,6 +250,49 @@ export function LibraryMenu() {
 
               <Menu.Separator className="my-1.5 h-px bg-rule-soft" />
 
+              {signedIn ? (
+                <>
+                  <div className="px-2 py-1 text-[10px] tracking-[0.14em] text-ink-faint uppercase">
+                    Cloud
+                  </div>
+                  {cloudItems.length === 0 ? (
+                    <div className="px-2 py-1.5 text-[11px] text-ink-faint italic">
+                      No cloud workflows
+                    </div>
+                  ) : (
+                    cloudItems.map((item) => (
+                      <Menu.Item
+                        key={item.id}
+                        onClick={() => doOpenCloud(item.id)}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 data-highlighted:bg-paper-3"
+                      >
+                        <span className="text-ink-faint" aria-hidden>
+                          {item.isPublic ? (
+                            <Globe size={12} />
+                          ) : (
+                            <Lock size={12} />
+                          )}
+                        </span>
+                        <span className="truncate">{item.name}</span>
+                      </Menu.Item>
+                    ))
+                  )}
+                  <MenuAction
+                    icon={<CloudUpload size={13} />}
+                    label="Save to cloud"
+                    onClick={doSaveToCloud}
+                  />
+                </>
+              ) : (
+                <MenuAction
+                  icon={<LogIn size={13} />}
+                  label="Sign in to sync"
+                  onClick={signIn}
+                />
+              )}
+
+              <Menu.Separator className="my-1.5 h-px bg-rule-soft" />
+
               <MenuAction
                 icon={<Save size={13} />}
                 label="Save"
@@ -215,7 +317,8 @@ export function LibraryMenu() {
                 onClick={doImport}
               />
 
-              {names.length > 0 && (
+              {(names.length > 0 ||
+                (signedIn && cloudItems.length > 0)) && (
                 <>
                   <Menu.Separator className="my-1.5 h-px bg-rule-soft" />
                   <MenuAction
@@ -315,7 +418,7 @@ export function LibraryMenu() {
       <Modal
         open={dialog?.kind === 'error'}
         onClose={() => setDialog(null)}
-        title="Import failed"
+        title={(dialog?.kind === 'error' && dialog.title) || 'Import failed'}
         footer={
           <button
             type="button"
@@ -348,36 +451,72 @@ export function LibraryMenu() {
           </button>
         }
       >
-        <div className="flex flex-col gap-1">
-          {names.map((name) => (
-            <div
-              key={name}
-              className="flex items-center gap-2 rounded-md border border-rule-soft px-2.5 py-2"
-            >
-              <span className="truncate font-mono text-[12px] text-ink">
-                {name}
-              </span>
-              <span className="ml-auto shrink-0 font-mono text-[10px] text-ink-faint">
-                {formatSavedAt(entries[name].savedAt)}
-              </span>
-              <button
-                type="button"
-                aria-label={`Delete ${name}`}
-                className="rounded p-1 text-ink-faint hover:text-danger"
-                onClick={() =>
-                  setDialog({
-                    kind: 'confirm',
-                    message: `Delete the saved workflow “${name}”? This cannot be undone.`,
-                    confirmLabel: 'Delete',
-                    danger: true,
-                    onConfirm: () => remove(name),
-                  })
-                }
-              >
-                <Trash2 size={14} aria-hidden />
-              </button>
+        <div className="flex flex-col gap-3">
+          {names.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <div className="px-0.5 py-0.5 font-mono text-[10px] tracking-[0.14em] text-ink-faint uppercase">
+                Local
+              </div>
+              {names.map((name) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 rounded-md border border-rule-soft px-2.5 py-2"
+                >
+                  <span className="truncate font-mono text-[12px] text-ink">
+                    {name}
+                  </span>
+                  <span className="ml-auto shrink-0 font-mono text-[10px] text-ink-faint">
+                    {formatSavedAt(entries[name].savedAt)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${name}`}
+                    className="rounded p-1 text-ink-faint hover:text-danger"
+                    onClick={() =>
+                      setDialog({
+                        kind: 'confirm',
+                        message: `Delete the saved workflow “${name}”? This cannot be undone.`,
+                        confirmLabel: 'Delete',
+                        danger: true,
+                        onConfirm: () => remove(name),
+                      })
+                    }
+                  >
+                    <Trash2 size={14} aria-hidden />
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+
+          {signedIn && cloudItems.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <div className="px-0.5 py-0.5 font-mono text-[10px] tracking-[0.14em] text-ink-faint uppercase">
+                Cloud
+              </div>
+              {cloudItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-2 rounded-md border border-rule-soft px-2.5 py-2"
+                >
+                  <span className="shrink-0 text-ink-faint" aria-hidden>
+                    {item.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                  </span>
+                  <span className="truncate font-mono text-[12px] text-ink">
+                    {item.name}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${item.name} from cloud`}
+                    className="ml-auto rounded p-1 text-ink-faint hover:text-danger"
+                    onClick={() => confirmRemoveCloud(item.id, item.name)}
+                  >
+                    <Trash2 size={14} aria-hidden />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </Modal>
     </>

@@ -7,6 +7,7 @@ import { emitPrompt } from '@/emit/promptEmitter'
 import { useCopy } from '@/lib/useCopy'
 import { cn } from '@/lib/utils'
 import { LibraryMenu } from './LibraryMenu'
+import { AuthButton } from './AuthButton'
 
 /**
  * The Studio top bar (mockup `.top`): doc label + workflow name (display), the
@@ -102,6 +103,7 @@ export function TopBar() {
       </span>
 
       <LibraryMenu />
+      <AuthButton />
 
       <button
         type="button"
