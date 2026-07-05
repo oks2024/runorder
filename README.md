@@ -97,12 +97,8 @@ Design and internals are documented separately:
 
 | File | Contents |
 |---|---|
-| [`ProductDescription.md`](./ProductDescription.md) | Problem, audience, value prop, conceptual model, non-goals |
 | [`Architecture.md`](./Architecture.md) | Canonical model + projections, the two emitters, pattern vocabulary, schema |
-| [`MVP.md`](./MVP.md) | The V1 cut, validation rules, build order, the proof loop |
-| [`OpenQuestions.md`](./OpenQuestions.md) | Empirical unknowns to resolve by running real workflows |
 | [`CLAUDE.md`](./CLAUDE.md) | Working guidance, code map, guardrails, and **Next steps** |
-| `mockups/` | UI-direction mockups; mockup 16 ("Studio") is the shipped direction |
 
 Stack: TypeScript · React · Vite · Zod · Zustand + Immer · Tailwind v4 + shadcn/ui (Base UI) ·
 Vitest + React Testing Library.

@@ -15,6 +15,13 @@ dist-ssr
 # Claude Code personal settings
 .claude/settings.local.json
 
+# Local-only design docs & orchestration state — never published to the repo
+.exarch/
+mockups/
+/MVP.md
+/OpenQuestions.md
+/ProductDescription.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
