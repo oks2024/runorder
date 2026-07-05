@@ -172,6 +172,9 @@ describe('LibraryMenu', () => {
     expect(
       screen.getByRole('menuitem', { name: /Save to cloud/ }),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitem', { name: /Share \/ publish/ }),
+    ).toBeInTheDocument()
   })
 
   it('opening a cloud workflow over unsaved work confirms first, then loads', async () => {

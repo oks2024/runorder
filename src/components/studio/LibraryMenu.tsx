@@ -10,6 +10,7 @@ import {
   Trash2,
   ChevronDown,
   CloudUpload,
+  Share2,
   Globe,
   Lock,
   LogIn,
@@ -22,6 +23,7 @@ import { blankSpec } from '@/spec/seed'
 import { serializeSpec, specFilename, parseImport } from '@/io/persist'
 import { downloadText, readFileText } from '@/io/download'
 import { Modal, btnPrimary, btnGhost, btnDanger } from './Modal'
+import { PublishDialog } from './PublishDialog'
 
 /** Which modal (if any) is open, and the data it needs. */
 type DialogState =
@@ -35,6 +37,7 @@ type DialogState =
     }
   | { kind: 'error'; message: string; title?: string }
   | { kind: 'manage' }
+  | { kind: 'publish' }
   | null
 
 /**
@@ -282,6 +285,11 @@ export function LibraryMenu() {
                     label="Save to cloud"
                     onClick={doSaveToCloud}
                   />
+                  <MenuAction
+                    icon={<Share2 size={13} />}
+                    label="Share / publish…"
+                    onClick={() => setDialog({ kind: 'publish' })}
+                  />
                 </>
               ) : (
                 <MenuAction
@@ -519,6 +527,11 @@ export function LibraryMenu() {
           )}
         </div>
       </Modal>
+
+      {/* Share / publish (signed-in cloud action) — mounted only while active */}
+      {dialog?.kind === 'publish' && (
+        <PublishDialog onClose={() => setDialog(null)} />
+      )}
     </>
   )
 }

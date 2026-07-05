@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { StudioApp } from '@/components/studio/StudioApp'
+import { ShareLinkLoader } from '@/components/studio/ShareLinkLoader'
 import { useAuthStore } from '@/store/authStore'
 import { useCloudStore } from '@/store/cloudStore'
 
@@ -17,7 +18,12 @@ function App() {
     if (user) void useCloudStore.getState().refresh()
   }, [user])
 
-  return <StudioApp />
+  return (
+    <>
+      <StudioApp />
+      <ShareLinkLoader />
+    </>
+  )
 }
 
 export default App
