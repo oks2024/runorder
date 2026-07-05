@@ -1,11 +1,9 @@
-import { useUiStore } from '@/store/uiStore'
 import type { Rehearsal } from '@/lib/rehearse'
 
 /**
- * The rehearsal banner (mockup `.rh-banner`): the read-only kicker, the sample-N stepper
- * (writes only `uiStore.sampleN` — never the spec), and a right-aligned tally of this
- * rehearsal's live agent count / per-tick breakdown / peak seats. Deliberately distinct
- * wording from the top-bar status pill (that one is cap-based; this one is sampleN-based).
+ * The rehearsal banner (mockup `.rh-banner`): the read-only kicker plus a right-aligned tally
+ * of this rehearsal's agent count / per-tick breakdown / peak seats. The rehearsal instantiates
+ * every capped pattern at its cap ceiling, so this count matches the top-bar cap-based estimate.
  */
 export function RehearsalBanner({
   rehearsal,
@@ -14,9 +12,6 @@ export function RehearsalBanner({
   rehearsal: Rehearsal
   concurrency: number
 }) {
-  const sampleN = useUiStore((s) => s.sampleN)
-  const setSampleN = useUiStore((s) => s.setSampleN)
-
   return (
     <div
       className="flex flex-wrap items-center gap-3.5 rounded-[10px] border px-[18px] py-3"
@@ -28,29 +23,9 @@ export function RehearsalBanner({
       <span className="font-mono text-[9.5px] font-semibold tracking-[0.16em] text-intended uppercase">
         Rehearsal · read-only
       </span>
-      <span className="text-[13px] text-ink-dim">nothing runs, nothing is spent — rehearse with</span>
-      <span className="inline-flex items-center">
-        <button
-          type="button"
-          aria-label="Fewer"
-          onClick={() => setSampleN(sampleN - 1)}
-          className="h-6 w-6 rounded-l-md border border-rule bg-paper font-mono text-[13px] leading-none text-ink-dim"
-        >
-          −
-        </button>
-        <span className="border-y border-rule bg-paper px-[11px] py-[2px] font-mono text-[12.5px] font-semibold">
-          {sampleN}
-        </span>
-        <button
-          type="button"
-          aria-label="More"
-          onClick={() => setSampleN(sampleN + 1)}
-          className="h-6 w-6 rounded-r-md border border-rule bg-paper font-mono text-[13px] leading-none text-ink-dim"
-        >
-          +
-        </button>
+      <span className="text-[13px] text-ink-dim">
+        nothing runs, nothing is spent — this is the run at its cap ceiling.
       </span>
-      <span className="text-[13px] text-ink-dim">sample findings</span>
 
       <span className="ml-auto font-mono text-[10.5px] text-ink-faint">
         <b className="text-ink">{rehearsal.totalAgents} agents</b>

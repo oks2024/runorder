@@ -19,7 +19,6 @@ beforeEach(() => {
     promptBookTab: 'script',
     draggingPattern: null,
     provHover: null,
-    sampleN: 12,
   })
 })
 

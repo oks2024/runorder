@@ -33,7 +33,6 @@ beforeEach(() => {
     promptBookTab: 'script',
     draggingPattern: null,
     provHover: null,
-    sampleN: 12,
   })
   writeText.mockClear()
   Object.assign(navigator, { clipboard: { writeText } })

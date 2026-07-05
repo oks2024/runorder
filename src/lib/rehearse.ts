@@ -1,26 +1,26 @@
 /**
  * Rehearsal derivation — a truthful, read-only dry-run of what the emitted script does.
  *
- * The Studio "Rehearsal" view instantiates the spec at a sample fan-out size N and shows,
+ * The Studio "Rehearsal" view instantiates the spec at each pattern's cap ceiling and shows,
  * tick by tick, exactly which agents run, how many seats they take against the concurrency
- * cap, which items get dropped by an in-script cap, and — for one worker — the fully
- * assembled input it receives. This module is that view's data model: a pure, deterministic
- * projection of a `WorkflowSpec` + a sample size.
+ * cap, and — for one worker — the fully assembled input it receives. This module is that
+ * view's data model: a pure, deterministic projection of a `WorkflowSpec`.
  *
  * It MUST mirror `emit/scriptEmitter.ts` exactly (guardrail #5 — never claim behavior the
  * script doesn't produce):
- *   - Item counts propagate like the emitter's `itemsExpr`: the first materialized item list
- *     (workflow args, or a schema-forced `{ context, items }` producer, or a heuristic split)
- *     has `sampleN` entries; a fan-out/delegate's *output* array carries its live (kept)
- *     instance count downstream.
- *   - A fan-out / map / grantee swarm is sliced to its cap in-script, so items beyond the cap
- *     are genuinely *dropped* (shown, but not counted toward seats/totals).
+ *   - A fan-out / map / grantee / verify swarm is sliced to its cap in-script (`.slice(0,
+ *     cap)`), so the rehearsal instantiates it at exactly that cap ceiling — the honest upper
+ *     bound of how many run. When the producer's item count is dynamic (workflow args, a
+ *     schema-forced `{ context, items }` producer) or a known array longer than the cap, a
+ *     calm note discloses that extras beyond the cap aren't processed. When the upstream is a
+ *     known array no longer than the cap (a prior fan-out/branches), the count follows it and
+ *     nothing is truncated.
  *   - `reads` splice into every agent of a phase (both stages of a composite) EXCEPT delegate
  *     grantees, which instead receive the lead's intra-phase `context`.
  *   - Only runtime-enforced facts are marked "enforced": a pinned model; an `inherit` model is
  *     explicitly "not pinned". Caps/iters/angles are literal in-script (bounds, shown as such).
  *
- * Nothing here reads the clock or randomness — same spec + N ⇒ same rehearsal.
+ * Nothing here reads the clock or randomness — same spec ⇒ same rehearsal.
  */
 import { INHERIT, resolveAlias } from '@/lib/models'
 import { branchLabels, deriveMemoryNames } from '@/lib/memoryNames'
@@ -66,8 +66,6 @@ export interface RehearsalInstance {
   role: InstanceRole
   /** 1-based worker/take number within a swarm; undefined for singletons. */
   n?: number
-  /** Beyond the in-script slice cap — shown, but never runs (empty `receives`). */
-  dropped: boolean
   receives: ReceiveSegment[]
 }
 
@@ -83,9 +81,9 @@ export interface RehearsalTick {
   /** Extra context (e.g. the loop's bounded/sequential caveat). */
   note?: string
   instances: RehearsalInstance[]
-  /** Live instances actually seated this tick = min(live count, concurrency). */
+  /** Instances actually seated this tick = min(instance count, concurrency). */
   seatsUsed: number
-  /** Live instances beyond the concurrency cap — they wait (NOT dropped). */
+  /** Instances beyond the concurrency cap — they wait (queued, NOT dropped). */
   queued: number
 }
 
@@ -96,25 +94,15 @@ export interface RehearsalGap {
   countLabel: string
 }
 
-export interface CapWarning {
-  phaseIndex: number
-  nodeId?: string
-  kind: 'fanout' | 'mapReduce' | 'delegate' | 'verify'
-  cap: number
-  incoming: number
-  dropped: number
-}
-
 export interface Rehearsal {
   ticks: RehearsalTick[]
   gaps: RehearsalGap[]
-  /** Live (non-dropped) instances summed; a loop counts once (its bound is in the note). */
+  /** Instances summed; a loop counts once (its bound is in the note). */
   totalAgents: number
   /** Max `seatsUsed` across ticks. */
   peakSeats: number
-  /** Per-tick live counts joined by " + ", parallel swarm ticks marked `N∥` (e.g. "1 + 8∥ + 1"). */
+  /** Per-tick counts joined by " + ", parallel swarm ticks marked `N∥` (e.g. "1 + 8∥ + 1"). */
   breakdown: string
-  capWarnings: CapWarning[]
 }
 
 // --- small pure helpers ------------------------------------------------------------------
@@ -180,7 +168,6 @@ interface BuildOpts {
   ref: string | null
   role: InstanceRole
   n?: number
-  dropped?: boolean
   /** Pre-built read segments (phase reads, or the lead-context pseudo-read for grantees). */
   reads?: ReceiveSegment[]
   item?: ReceiveSegment
@@ -194,15 +181,11 @@ interface BuildOpts {
   extraSys?: string[]
 }
 
-/** Assemble one instance and its truthful `receives` (empty when dropped — it never runs). */
+/** Assemble one instance and its truthful `receives`. */
 function buildInstance(spec: WorkflowSpec, o: BuildOpts): RehearsalInstance {
   const agent = o.ref ? (spec.agents.find((a) => a.id === o.ref) ?? null) : null
   const agentName = agent ? agent.name : o.ref ? `«${o.ref}?»` : '«?»'
   const model = resolveAlias(agent?.model ?? INHERIT)
-
-  if (o.dropped) {
-    return { agentName, model, role: o.role, n: o.n, dropped: true, receives: [] }
-  }
 
   const sys: string[] = [
     model === INHERIT ? 'session model — not pinned' : `model ${model} · enforced`,
@@ -224,23 +207,22 @@ function buildInstance(spec: WorkflowSpec, o: BuildOpts): RehearsalInstance {
     text: agent && agent.prompt.trim() ? agent.prompt : '(no prompt yet)',
   })
   receives.push({ kind: 'returns', shape: o.shape, collectedInto: o.collectedInto })
-  return { agentName, model, role: o.role, n: o.n, dropped: false, receives }
+  return { agentName, model, role: o.role, n: o.n, receives }
 }
 
 // --- the derivation ----------------------------------------------------------------------
 
 /**
- * Instantiate `spec` at a sample fan-out size `sampleN` into a tick-by-tick dry run.
+ * Instantiate `spec` at each pattern's cap ceiling into a tick-by-tick dry run.
  *
  * Pure and deterministic. Unsupported top-level nodes (a nested `sequence`) contribute no
  * ticks (mirrors the emitter's loud skip), keeping the projection honest rather than faking
  * an expansion the script won't run.
  */
-export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
+export function rehearse(spec: WorkflowSpec): Rehearsal {
   const phases = spec.root.type === 'sequence' ? spec.root.steps : [spec.root]
   const mems = deriveMemoryNames(spec)
   const concurrency = spec.caps.concurrency
-  const n = Math.max(1, Math.round(Number.isFinite(sampleN) ? sampleN : 1))
 
   const memName = (i: number): string => mems[i]?.name ?? `phase-${i + 1}`
   const agentName = (ref: string | null): string => {
@@ -258,8 +240,7 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
 
   const ticks: RehearsalTick[] = []
   const gaps: RehearsalGap[] = []
-  const capWarnings: CapWarning[] = []
-  /** Live output count per phase (feeds downstream item counts + gap labels). */
+  /** Output count per phase (feeds downstream item counts + gap labels). */
   const outCounts: number[] = new Array(phases.length).fill(1)
   /** Global tick index of each phase's last tick, or -1 for a skipped phase. */
   const lastTick: number[] = new Array(phases.length).fill(-1)
@@ -304,36 +285,51 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
   }
 
   /**
-   * The item list a consuming phase (fan-out / map) iterates — count + per-item provenance —
-   * mirroring the emitter's `itemsExpr`.
+   * The item list a consuming phase (fan-out / map / verify) iterates — its known upstream
+   * length (or `null` when the count is dynamic and only bounded by the consumer's cap) plus
+   * per-item provenance — mirroring the emitter's `itemsExpr`. A consumer renders
+   * `upstream == null ? cap : min(upstream, cap)` instances (the honest cap ceiling).
    */
-  const itemSource = (index: number): { count: number; describe: (k: number) => string } => {
+  const itemSource = (index: number): { upstream: number | null; describe: (k: number) => string } => {
     if (index === 0) {
-      return { count: n, describe: () => 'from the workflow args (heuristic split)' }
+      return { upstream: null, describe: () => 'from the workflow args (heuristic split)' }
     }
     const prev = phases[index - 1]
     const prevMem = memName(index - 1)
     if (schemaForced[index - 1]) {
       return {
-        count: n,
+        upstream: null,
         describe: (k) => `from ${prevMem}.items[${k - 1}] — exact array, not a string split`,
       }
     }
     if (yieldsItemArray(prev)) {
       const c = outCounts[index - 1]
       return {
-        count: c,
+        upstream: c,
         describe:
           prev.type === 'verify'
             ? () => `from ${prevMem} — the ≤${c} majority-gate survivors (exact array)`
             : () => `from ${prevMem} — exact array of ${c} outputs (not a string split)`,
       }
     }
-    return { count: n, describe: () => 'from a heuristic split of the previous output' }
+    return { upstream: null, describe: () => 'from a heuristic split of the previous output' }
   }
 
+  /** Instances rendered for a cap-sliced consumer, and whether the slice can truncate. */
+  const cappedCount = (
+    src: { upstream: number | null },
+    cap: number,
+  ): { count: number; truncates: boolean } =>
+    src.upstream == null
+      ? { count: cap, truncates: true }
+      : { count: Math.min(src.upstream, cap), truncates: src.upstream > cap }
+
+  /** The calm one-line truncation note (only when the slice can actually drop items). */
+  const capNote = (cap: number): string =>
+    `takes the first ${cap} item(s) the producer yields — any beyond ${cap} aren't processed`
+
   const pushTick = (t: Omit<RehearsalTick, 'seatsUsed' | 'queued'>): void => {
-    const live = t.instances.filter((i) => !i.dropped).length
+    const live = t.instances.length
     ticks.push({
       ...t,
       seatsUsed: Math.min(live, concurrency),
@@ -394,8 +390,10 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
           ],
         })
 
-        const incoming = n // lead's item list is schema-forced with sampleN items
+        // The lead's item list is schema-forced and dynamic, so the grantee swarm is
+        // rendered at exactly the grant cap (its ceiling) — the slice can always truncate.
         const cap = grant.cap
+        const count = cap
         const leadContext: ReceiveSegment = {
           kind: 'read',
           memoryName: `${leadName} context`,
@@ -404,25 +402,20 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
           source: `the lead's shared context (intra-phase — not a named memory)`,
         }
         const grantees: RehearsalInstance[] = []
-        for (let k = 1; k <= incoming; k++) {
-          const dropped = k > cap
+        for (let k = 1; k <= count; k++) {
           grantees.push(
             buildInstance(spec, {
               ref: grant.agent,
               role: 'grantee',
               n: k,
-              dropped,
               seat: true,
               seatCap: cap,
               reads: [leadContext],
-              item: itemSeg(k, incoming, `from the lead's item list [${k - 1}] — exact array, not a string split`),
+              item: itemSeg(k, count, `from the lead's item list [${k - 1}] — exact array, not a string split`),
               shape: FREE_TEXT_SHAPE,
               collectedInto: terminalCollect,
             }),
           )
-        }
-        if (incoming > cap) {
-          capWarnings.push({ phaseIndex: i, nodeId, kind: 'delegate', cap, incoming, dropped: incoming - cap })
         }
         pushTick({
           label: nextLabel(),
@@ -430,40 +423,43 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
           nodeId,
           kind: 'delegate',
           stage: 'delegates',
+          note: capNote(cap),
           instances: grantees,
         })
-        outCounts[i] = Math.min(incoming, cap)
+        outCounts[i] = count
         lastTick[i] = ticks.length - 1
         break
       }
 
       case 'fanout': {
         const src = itemSource(i)
-        const incoming = src.count
         const cap = node.cap
+        const { count, truncates } = cappedCount(src, cap)
         const instances: RehearsalInstance[] = []
-        for (let k = 1; k <= incoming; k++) {
-          const dropped = k > cap
+        for (let k = 1; k <= count; k++) {
           instances.push(
             buildInstance(spec, {
               ref: node.agent,
               role: 'worker',
               n: k,
-              dropped,
               seat: true,
               seatCap: cap,
               reads,
-              item: itemSeg(k, incoming, src.describe(k)),
+              item: itemSeg(k, count, src.describe(k)),
               shape: FREE_TEXT_SHAPE,
               collectedInto: terminalCollect,
             }),
           )
         }
-        if (incoming > cap) {
-          capWarnings.push({ phaseIndex: i, nodeId, kind: 'fanout', cap, incoming, dropped: incoming - cap })
-        }
-        pushTick({ label: nextLabel(), phaseIndex: i, nodeId, kind: 'fanout', instances })
-        outCounts[i] = Math.min(incoming, cap)
+        pushTick({
+          label: nextLabel(),
+          phaseIndex: i,
+          nodeId,
+          kind: 'fanout',
+          note: truncates ? capNote(cap) : undefined,
+          instances,
+        })
+        outCounts[i] = count
         lastTick[i] = ticks.length - 1
         break
       }
@@ -493,32 +489,35 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
 
       case 'mapReduce': {
         const src = itemSource(i)
-        const incoming = src.count
         const cap = node.map.cap
+        const { count, truncates } = cappedCount(src, cap)
         const mappers: RehearsalInstance[] = []
-        for (let k = 1; k <= incoming; k++) {
-          const dropped = k > cap
+        for (let k = 1; k <= count; k++) {
           mappers.push(
             buildInstance(spec, {
               ref: node.map.agent,
               role: 'mapper',
               n: k,
-              dropped,
               seat: true,
               seatCap: cap,
               reads,
-              item: itemSeg(k, incoming, src.describe(k)),
+              item: itemSeg(k, count, src.describe(k)),
               shape: FREE_TEXT_SHAPE,
               collectedInto: 'collected for the reduce step',
             }),
           )
         }
-        if (incoming > cap) {
-          capWarnings.push({ phaseIndex: i, nodeId, kind: 'mapReduce', cap, incoming, dropped: incoming - cap })
-        }
-        pushTick({ label: nextLabel(), phaseIndex: i, nodeId, kind: 'mapReduce', stage: 'map', instances: mappers })
+        pushTick({
+          label: nextLabel(),
+          phaseIndex: i,
+          nodeId,
+          kind: 'mapReduce',
+          stage: 'map',
+          note: truncates ? capNote(cap) : undefined,
+          instances: mappers,
+        })
 
-        const mapLive = Math.min(incoming, cap)
+        const mapLive = count
         const forced = schemaForced[i]
         pushTick({
           label: nextLabel(),
@@ -628,30 +627,14 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
       }
 
       case 'verify': {
-        // Per-item refuter jury: `votes` independent skeptics per (capped) item; items beyond
-        // the cap are dropped in-script. Survivors are decided at run time by the majority
+        // Per-item refuter jury: `votes` independent skeptics per (capped) item. The item pool
+        // is rendered at the cap ceiling; survivors are decided at run time by the majority
         // gate, so downstream counts are upper bounds.
         const src = itemSource(i)
-        const incoming = src.count
         const cap = node.cap
+        const { count, truncates } = cappedCount(src, cap)
         const skeptics: RehearsalInstance[] = []
-        for (let k = 1; k <= incoming; k++) {
-          if (k > cap) {
-            // One dropped card per dropped ITEM (its whole jury never convenes).
-            skeptics.push(
-              buildInstance(spec, {
-                ref: node.skeptic,
-                role: 'skeptic',
-                n: k,
-                dropped: true,
-                seat: true,
-                seatCap: cap,
-                shape: VERDICT_SHAPE,
-                collectedInto: 'counted toward the majority gate',
-              }),
-            )
-            continue
-          }
+        for (let k = 1; k <= count; k++) {
           for (let v = 1; v <= node.votes; v++) {
             skeptics.push(
               buildInstance(spec, {
@@ -660,7 +643,7 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
                 n: (k - 1) * node.votes + v,
                 seat: true,
                 reads,
-                item: itemSeg(k, incoming, src.describe(k)),
+                item: itemSeg(k, count, src.describe(k)),
                 extraSys: [`vote ${v} of ${node.votes} on item ${k} — independent take`],
                 shape: VERDICT_SHAPE,
                 collectedInto: 'counted toward the majority gate',
@@ -668,18 +651,18 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
             )
           }
         }
-        if (incoming > cap) {
-          capWarnings.push({ phaseIndex: i, nodeId, kind: 'verify', cap, incoming, dropped: incoming - cap })
-        }
+        const note = truncates
+          ? `majority gate — survivors decided at run time · ${capNote(cap)}`
+          : 'majority gate — survivors decided at run time'
         pushTick({
           label: nextLabel(),
           phaseIndex: i,
           nodeId,
           kind: 'verify',
-          note: 'majority gate — survivors decided at run time',
+          note,
           instances: skeptics,
         })
-        outCounts[i] = Math.min(incoming, cap) // upper bound: the gate can only shrink it
+        outCounts[i] = count // upper bound: the gate can only shrink it
         lastTick[i] = ticks.length - 1
         break
       }
@@ -761,7 +744,20 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
     const mem = memName(i)
     let countLabel: string
     if (schemaForced[i]) {
-      countLabel = `${mem}.items[] — ${n} items in this rehearsal`
+      // The producer yields a dynamic { context, items }; the next phase slices it to its cap.
+      const consumer = phases[i + 1]
+      const consumerCap =
+        consumer?.type === 'fanout'
+          ? consumer.cap
+          : consumer?.type === 'mapReduce'
+            ? consumer.map.cap
+            : consumer?.type === 'verify'
+              ? consumer.cap
+              : undefined
+      countLabel =
+        consumerCap != null
+          ? `${mem}.items[] — up to ${consumerCap} taken (cap)`
+          : `${mem}.items[] — exact array`
     } else if (node.type === 'verify') {
       countLabel = `${mem} — ≤ ${outCounts[i]} survivors (majority gate)`
     } else if (node.type === 'branches') {
@@ -774,12 +770,12 @@ export function rehearse(spec: WorkflowSpec, sampleN: number): Rehearsal {
     gaps.push({ afterTickIndex: lastTick[i], memoryName: mem, countLabel })
   }
 
-  const liveOf = (t: RehearsalTick): number => t.instances.filter((x) => !x.dropped).length
-  const totalAgents = ticks.reduce((sum, t) => sum + liveOf(t), 0)
+  const countOf = (t: RehearsalTick): number => t.instances.length
+  const totalAgents = ticks.reduce((sum, t) => sum + countOf(t), 0)
   const peakSeats = ticks.reduce((mx, t) => Math.max(mx, t.seatsUsed), 0)
   const breakdown = ticks
-    .map((t) => (isParallelTick(t) ? `${liveOf(t)}∥` : `${liveOf(t)}`))
+    .map((t) => (isParallelTick(t) ? `${countOf(t)}∥` : `${countOf(t)}`))
     .join(' + ')
 
-  return { ticks, gaps, totalAgents, peakSeats, breakdown, capWarnings }
+  return { ticks, gaps, totalAgents, peakSeats, breakdown }
 }

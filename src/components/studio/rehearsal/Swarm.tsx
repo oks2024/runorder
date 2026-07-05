@@ -3,8 +3,7 @@ import { InstanceCard } from './InstanceCard'
 
 /**
  * The parallel-worker grid (mockup `.swarm`): auto-fill compact `InstanceCard`s. Clicking a
- * live card selects it as the anatomy subject (`onSelect`); dropped cards aren't clickable —
- * there's nothing to inspect, they never ran.
+ * card selects it as the anatomy subject (`onSelect`).
  */
 export function Swarm({
   instances,
@@ -26,7 +25,7 @@ export function Swarm({
           instance={inst}
           compact
           isHero={heroIndex === i}
-          onClick={inst.dropped ? undefined : () => onSelect(i)}
+          onClick={() => onSelect(i)}
         />
       ))}
     </div>

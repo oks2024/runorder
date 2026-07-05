@@ -12,7 +12,6 @@ beforeEach(() => {
     promptBookTab: 'script',
     draggingPattern: null,
     provHover: null,
-    sampleN: 12,
   })
 })
 
@@ -21,7 +20,7 @@ function switchToRehearsal() {
 }
 
 describe('Rehearsal view — banner + wiring', () => {
-  it('switching to Rehearsal shows the sampleN=12 seed tally and hides the rundown', () => {
+  it('switching to Rehearsal shows the cap-ceiling seed tally and hides the rundown', () => {
     render(<App />)
     switchToRehearsal()
 
@@ -42,48 +41,18 @@ describe('Rehearsal view — banner + wiring', () => {
   })
 })
 
-describe('Rehearsal view — sampleN stepper', () => {
-  it('stepping down to 5 clears the cap warning; stepping back up to 12 restores it', () => {
+describe('Rehearsal view — truncation disclosure', () => {
+  it('renders the fan-out at its cap (8 workers) with a calm note, no red alarm', () => {
     render(<App />)
     switchToRehearsal()
 
-    for (let i = 0; i < 7; i++) fireEvent.click(screen.getByRole('button', { name: 'Fewer' }))
-    expect(useUiStore.getState().sampleN).toBe(5)
-    expect(screen.getAllByRole('button', { name: /investigator/i })).toHaveLength(5)
+    expect(screen.getAllByRole('button', { name: /investigator/i })).toHaveLength(8)
+    expect(
+      screen.getByText(/takes the first 8 item\(s\) the producer yields/),
+    ).toBeInTheDocument()
+    // no silent-drop alarm and no dropped cards
     expect(screen.queryByText(/drops \d+ silently/)).not.toBeInTheDocument()
-
-    for (let i = 0; i < 7; i++) fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    expect(useUiStore.getState().sampleN).toBe(12)
-    expect(screen.getByText('drops 4 silently')).toBeInTheDocument()
-  })
-})
-
-describe('Rehearsal view — cap warning fix button', () => {
-  it('raises the fan-out cap, clears the warning, and updates the tally', () => {
-    render(<App />)
-    switchToRehearsal()
-
-    expect(screen.getByText('drops 4 silently')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'raise cap to 12' }))
-
-    const root = useWorkflowStore.getState().spec.root
-    expect(root.type).toBe('sequence')
-    if (root.type === 'sequence') {
-      const fanout = root.steps[1]
-      expect(fanout.type).toBe('fanout')
-      if (fanout.type === 'fanout') expect(fanout.cap).toBe(12)
-    }
-
-    expect(screen.queryByText(/drops \d+ silently/)).not.toBeInTheDocument()
-    expect(screen.getByText('14 agents')).toBeInTheDocument()
-  })
-})
-
-describe('Rehearsal view — dropped cards', () => {
-  it('renders 4 dropped cards at sampleN=12', () => {
-    render(<App />)
-    switchToRehearsal()
-    expect(screen.getAllByText('dropped by cap')).toHaveLength(4)
+    expect(screen.queryByText('dropped by cap')).not.toBeInTheDocument()
   })
 })
 
@@ -97,7 +66,7 @@ describe('Rehearsal view — anatomy card', () => {
     expect(anatomy.textContent).toContain('model claude-sonnet-4-6 · enforced')
     expect(anatomy.textContent).toContain('[reviewer] — read, from reviewer')
     expect(anatomy.textContent).toContain('spliced because this phase reads → reviewer')
-    expect(anatomy.textContent).toContain('item 3 of 12')
+    expect(anatomy.textContent).toContain('item 3 of 8')
     expect(anatomy.textContent).toContain('trace the root cause')
     expect(anatomy.textContent).toContain('must return')
   })
