@@ -15,9 +15,10 @@ dist-ssr
 # Claude Code personal settings
 .claude/settings.local.json
 
-# Local-only design docs & orchestration state — never published to the repo
+# Local-only design docs, captured test runs & orchestration state — never published to the repo
 .exarch/
 mockups/
+/test/
 /MVP.md
 /OpenQuestions.md
 /ProductDescription.md
