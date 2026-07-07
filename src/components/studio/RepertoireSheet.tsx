@@ -3,6 +3,7 @@ import { useWorkflowStore } from '@/store/workflowStore'
 import { useUiStore } from '@/store/uiStore'
 import { PATTERN_ORDER, PATTERN_INFO, PATTERN_NAME } from '@/lib/patterns'
 import { PatternCardFace } from './PatternCard'
+import { GlyphLegend } from './glyphs'
 
 /**
  * The repertoire as a pick-to-insert dialog: the touch path into `insertPattern`, opened by
@@ -39,6 +40,7 @@ export function RepertoireSheet() {
               ×
             </button>
           </div>
+          <GlyphLegend className="px-5 pb-3" />
           <div className="min-h-0 flex-1 overflow-y-auto border-t border-rule-soft bg-paper-2 px-3.5 py-3.5">
             {PATTERN_ORDER.map((kind) => (
               <button

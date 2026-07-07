@@ -155,6 +155,13 @@ describe('Studio pattern shelf — drag-to-insert', () => {
     }
   })
 
+  it('shows the glyph-grammar legend above the cards', () => {
+    render(<App />)
+    const shelf = screen.getByLabelText('Pattern repertoire')
+    expect(within(shelf).getByText('agent run')).toBeInTheDocument()
+    expect(within(shelf).getByText(/item handed between phases/)).toBeInTheDocument()
+  })
+
   it('a branches phase renders one token per branch and can add/remove branches', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /^branches/i }))

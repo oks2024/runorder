@@ -1,5 +1,6 @@
 import { PATTERN_ORDER } from '@/lib/patterns'
 import { PatternCard } from './PatternCard'
+import { GlyphLegend } from './glyphs'
 
 /**
  * The pattern repertoire (mockup `.shelf`): a fixed-width left sidebar listing the topologies
@@ -16,10 +17,11 @@ export function Shelf() {
       <div className="mx-1 mb-1 font-mono text-[9.5px] tracking-[0.16em] text-ink-faint uppercase">
         Repertoire
       </div>
-      <p className="mx-1 mb-3.5 text-[11px] leading-[1.45] text-ink-faint">
+      <p className="mx-1 mb-2 text-[11px] leading-[1.45] text-ink-faint">
         {PATTERN_ORDER.length} shapes, each marked with its proof status. Drag one into the
         rundown — its handoffs arrive pre-wired.
       </p>
+      <GlyphLegend className="mx-1 mb-3.5" />
       {PATTERN_ORDER.map((kind) => (
         <PatternCard key={kind} kind={kind} />
       ))}
