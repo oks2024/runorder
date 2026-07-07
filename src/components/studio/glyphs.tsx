@@ -159,17 +159,21 @@ export const PATTERN_GLYPHS: Record<PatternKey, ReactNode> = {
 export function GlyphLegend({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`flex items-center gap-1.5 text-[11px] leading-[1.45] text-ink-faint ${className}`}
+      className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-[1.45] text-ink-faint ${className}`}
     >
-      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className="flex-none">
-        <circle cx="5" cy="5" r="3" fill="currentColor" />
-      </svg>
-      <span>agent run</span>
-      <span aria-hidden>·</span>
-      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className="flex-none">
-        <rect x="2.4" y="2.4" width="5.2" height="5.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      </svg>
-      <span>item handed between phases</span>
+      {/* each icon+label pair wraps as a unit — the narrow shelf must never split a label */}
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className="flex-none">
+          <circle cx="5" cy="5" r="3" fill="currentColor" />
+        </svg>
+        agent run
+      </span>
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className="flex-none">
+          <rect x="2.4" y="2.4" width="5.2" height="5.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+        item handed between phases
+      </span>
     </div>
   )
 }
