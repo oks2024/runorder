@@ -5,13 +5,13 @@
  * with an immediately-expiring one; there is no server record to delete. 204, empty body.
  */
 import type { Env } from '../_lib/env'
-import { clearSessionCookie } from '../_lib/session'
+import { clearSessionCookie, isSecureRequest } from '../_lib/session'
 
-export const onRequestPost: PagesFunction<Env> = () => {
+export const onRequestPost: PagesFunction<Env> = ({ request }) => {
   return new Response(null, {
     status: 204,
     headers: {
-      'Set-Cookie': clearSessionCookie(),
+      'Set-Cookie': clearSessionCookie(isSecureRequest(request)),
       'Cache-Control': 'no-store',
     },
   })

@@ -31,7 +31,8 @@ export const onRequestGet: PagesFunction<Env> = (context) => {
   authorize.searchParams.set('redirect_uri', redirectUri)
   authorize.searchParams.set('state', state)
 
-  const cookie = `${OAUTH_COOKIE}=${state}:${returnTo}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=600`
+  const secureAttr = url.protocol === 'https:' ? ' Secure;' : ''
+  const cookie = `${OAUTH_COOKIE}=${state}:${returnTo}; HttpOnly;${secureAttr} SameSite=Lax; Path=/api/auth; Max-Age=600`
 
   return new Response(null, {
     status: 302,

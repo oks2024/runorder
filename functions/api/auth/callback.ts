@@ -14,6 +14,7 @@ import {
   parseCookies,
   signSession,
   sessionCookie,
+  isSecureRequest,
   SESSION_TTL_SECONDS,
 } from '../_lib/session'
 import { OAUTH_COOKIE } from './login'
@@ -110,13 +111,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const now = Math.floor(Date.now() / 1000)
   const token = await signSession(row.id, now + SESSION_TTL_SECONDS, env.SESSION_SECRET)
 
+  const secure = isSecureRequest(request)
+  const secureAttr = secure ? ' Secure;' : ''
   const headers = new Headers()
   headers.set('Location', returnTo)
   headers.set('Cache-Control', 'no-store')
-  headers.append('Set-Cookie', sessionCookie(token, SESSION_TTL_SECONDS))
+  headers.append('Set-Cookie', sessionCookie(token, SESSION_TTL_SECONDS, secure))
   headers.append(
     'Set-Cookie',
-    `${OAUTH_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=0`,
+    `${OAUTH_COOKIE}=; HttpOnly;${secureAttr} SameSite=Lax; Path=/api/auth; Max-Age=0`,
   )
   return new Response(null, { status: 302, headers })
 }

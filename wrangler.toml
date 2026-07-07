@@ -5,4 +5,4 @@ compatibility_date = "2026-07-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "runorder"
-database_id = "REPLACE-AFTER-wrangler-d1-create"   # placeholder — local dev (--local/pages dev) never validates it
+database_id = "f6b26b0c-0d3e-42fa-9ec4-a2115f81a08f"

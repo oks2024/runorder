@@ -106,14 +106,28 @@ export async function verifySession(
   return ok ? userId : null
 }
 
+/**
+ * Whether cookies set for this request should carry `Secure`.
+ *
+ * `Secure` cookies are only stored/sent over HTTPS, which is what we want in prod. But local
+ * dev is plain `http://localhost` (or `127.0.0.1`), where a `Secure` cookie would be silently
+ * dropped — breaking the OAuth CSRF round-trip and the session. Gate `Secure` on the request
+ * actually being HTTPS so the same code works locally and in prod.
+ */
+export function isSecureRequest(request: Request): boolean {
+  return new URL(request.url).protocol === 'https:'
+}
+
 /** Build the `Set-Cookie` value that plants a session token for `maxAge` seconds. */
-export function sessionCookie(value: string, maxAge: number): string {
-  return `${SESSION_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`
+export function sessionCookie(value: string, maxAge: number, secure = true): string {
+  const secureAttr = secure ? ' Secure;' : ''
+  return `${SESSION_COOKIE}=${value}; HttpOnly;${secureAttr} SameSite=Lax; Path=/; Max-Age=${maxAge}`
 }
 
 /** Build the `Set-Cookie` value that immediately expires the session cookie. */
-export function clearSessionCookie(): string {
-  return `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`
+export function clearSessionCookie(secure = true): string {
+  const secureAttr = secure ? ' Secure;' : ''
+  return `${SESSION_COOKIE}=; HttpOnly;${secureAttr} SameSite=Lax; Path=/; Max-Age=0`
 }
 
 /** Parse a `Cookie` request header into a name→value map (empty for a missing header). */
