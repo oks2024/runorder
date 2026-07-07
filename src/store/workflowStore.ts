@@ -21,6 +21,7 @@ import { referencedAgentIds } from '@/lib/nodeRoles'
 import { schemaForcible } from '@/emit/plumbing'
 import type { PatternKey } from '@/lib/patterns'
 import { migrateStorageKey } from '@/io/storage'
+import { track } from '@/api/analytics'
 import { codeReviewLoop } from '@/spec/seed'
 import { workflowSpecSchema } from '@/spec/schema'
 import type { Agent, PatternNode, WorkflowSpec } from '@/spec/schema'
@@ -340,6 +341,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         steps.splice(at, 0, buildPatternNode(kind, agentIds, s.spec.caps.concurrency, reads, nodeId))
         ok = true
       })
+      if (ok) track('pattern_insert', { kind })
       return ok ? nodeId : ''
     },
 

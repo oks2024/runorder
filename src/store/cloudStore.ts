@@ -15,6 +15,7 @@ import { create } from 'zustand'
 import { api, type CloudWorkflow, type CloudWorkflowMeta } from '@/api/client'
 import type { WorkflowSpec } from '@/spec/schema'
 import { validateSpecValue } from '@/io/persist'
+import { track } from '@/api/analytics'
 import { useWorkflowStore } from './workflowStore'
 
 /** A save/open/publish outcome, surfaced to the menu (success or a human-readable error). */
@@ -64,6 +65,7 @@ export const useCloudStore = create<CloudState>()((set) => ({
     if (!res.ok) return { ok: false, error: res.error }
     const meta = res.data.workflow
     set((s) => ({ items: upsertMeta(s.items, meta) }))
+    track('cloud_save')
     return { ok: true, meta }
   },
 
@@ -96,6 +98,7 @@ export const useCloudStore = create<CloudState>()((set) => ({
         w.id === updated.id ? { ...w, isPublic: updated.isPublic } : w,
       ),
     }))
+    if (updated.isPublic) track('workflow_publish')
     return { ok: true }
   },
 }))

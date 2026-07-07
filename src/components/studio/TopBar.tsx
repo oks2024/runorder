@@ -5,6 +5,7 @@ import { estimateRunSize } from '@/lib/estimate'
 import { emitScript } from '@/emit/scriptEmitter'
 import { emitPrompt } from '@/emit/promptEmitter'
 import { useCopy } from '@/lib/useCopy'
+import { track } from '@/api/analytics'
 import { cn } from '@/lib/utils'
 import { LibraryMenu } from './LibraryMenu'
 import { AuthButton } from './AuthButton'
@@ -31,6 +32,7 @@ export function TopBar() {
   const copyActive = () => {
     const useScript = !showScript || promptBookTab === 'script'
     copy(useScript ? emitScript(spec) : emitPrompt(spec))
+    track('workflow_copy', { format: useScript ? 'script' : 'prompt' })
   }
 
   return (

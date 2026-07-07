@@ -47,8 +47,11 @@ export function PatternCard({ kind }: { kind: PatternKey }) {
         {PATTERN_GLYPHS[kind]}
       </span>
       <span>
-        <span className="block font-mono text-[11.5px] font-semibold text-ink">
-          {PATTERN_NAME[kind]}
+        <span className="flex items-baseline justify-between font-mono text-[11.5px]">
+          <span className="font-semibold text-ink">{PATTERN_NAME[kind]}</span>
+          <span title="inputs → outputs" className="text-[10px] text-ink-faint">
+            {info.io}
+          </span>
         </span>
         <span className="block text-[10px] leading-[1.3] text-ink-faint">{info.use}</span>
       </span>

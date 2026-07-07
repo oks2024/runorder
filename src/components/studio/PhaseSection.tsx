@@ -7,7 +7,7 @@ import { PhaseSentence } from './PhaseSentence'
 import { PromptBlock } from './PromptBlock'
 import { FlowNote } from './FlowNote'
 import { hueVar } from './hue'
-import { KIND_LABEL, patternKeyOf, primaryRef, type EditableNode } from './roles'
+import { KIND_LABEL, ioLabel, patternKeyOf, primaryRef, type EditableNode } from './roles'
 
 /** The agent + optional role-kicker for each prompt block a phase shows (one per agent role). */
 function promptRoles(node: EditableNode): Array<{ ref: string; role?: string }> {
@@ -89,6 +89,9 @@ export function PhaseSection({
       >
         {index + 1}
         <span className="mt-1 block text-[9px] tracking-[0.12em] uppercase">{kind}</span>
+        <span title="inputs → outputs of this phase" className="mt-0.5 block text-[9px] font-normal">
+          {ioLabel(node)}
+        </span>
         <button
           type="button"
           title="Remove phase"

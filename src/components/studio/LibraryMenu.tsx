@@ -22,6 +22,7 @@ import { useCloudStore } from '@/store/cloudStore'
 import { blankSpec } from '@/spec/seed'
 import { serializeSpec, specFilename, parseImport } from '@/io/persist'
 import { downloadText, readFileText } from '@/io/download'
+import { track } from '@/api/analytics'
 import { Modal, btnPrimary, btnGhost, btnDanger } from './Modal'
 import { PublishDialog } from './PublishDialog'
 
@@ -97,6 +98,7 @@ export function LibraryMenu() {
 
   const doExport = () => {
     downloadText(specFilename(spec), serializeSpec(spec))
+    track('workflow_export')
   }
 
   const doImport = async () => {

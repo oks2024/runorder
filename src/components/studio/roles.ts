@@ -6,7 +6,7 @@
  * the logic the mockup-7 `PhaseRow` inlined; M2's `nodeRoles.ts` will generalize this once the
  * store needs the same extraction. Kept UI-local for M1.
  */
-import type { PatternKey } from '@/lib/patterns'
+import { PATTERN_INFO, type PatternKey } from '@/lib/patterns'
 import { primaryRef as primaryRefOrNull } from '@/lib/nodeRoles'
 import type { PatternNode } from '@/spec/schema'
 
@@ -49,6 +49,15 @@ export const KIND_LABEL: Record<PatternKey, string> = {
   verify: 'verify',
   multiAngle: 'multi-angle',
   delegate: 'delegate',
+}
+
+/**
+ * In→out signature shown under the kind label. Static per pattern, except branches — its
+ * output count is structural (the script literally runs those k agents), so show the real k.
+ */
+export function ioLabel(node: EditableNode): string {
+  if (node.type === 'branches') return `1→${node.branches.length}`
+  return PATTERN_INFO[patternKeyOf(node)].io
 }
 
 /** The primary agent ref of a phase (the one that leads the sentence), or '' if unresolvable. */

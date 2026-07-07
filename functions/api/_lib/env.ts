@@ -11,4 +11,6 @@ export interface Env {
   GITHUB_CLIENT_SECRET: string
   SESSION_SECRET: string
   TURNSTILE_SECRET_KEY: string
+  /** Comma-separated GitHub logins allowed to read `/api/stats` (empty ⇒ nobody). */
+  ADMIN_LOGINS?: string
 }

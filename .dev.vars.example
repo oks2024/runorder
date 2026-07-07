@@ -2,3 +2,5 @@ GITHUB_CLIENT_ID=your-dev-oauth-app-client-id
 GITHUB_CLIENT_SECRET=your-dev-oauth-app-client-secret
 SESSION_SECRET=generate-with--openssl-rand-hex-32
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+# Comma-separated GitHub logins allowed to read GET /api/stats (empty ⇒ nobody).
+ADMIN_LOGINS=your-github-login

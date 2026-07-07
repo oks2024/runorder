@@ -1,7 +1,7 @@
 /**
- * One source of truth for the pattern vocabulary shown to the user: badge labels, tooltip
- * copy, and (Studio) shelf one-liners. Used by the CompositionPane add-buttons and the
- * PhaseRow badges (mockup-7) as well as the Studio pattern shelf so all surfaces describe a
+ * One source of truth for the pattern vocabulary shown to the user: tooltip copy, shelf
+ * one-liners, and the in→out cardinality signature. Used by the Studio pattern shelf
+ * (`PatternCard`) and the rundown phase gutter (`PhaseSection`) so all surfaces describe a
  * pattern identically. Copy states what the *emitted script does* — including the injected
  * plumbing (reads splice, forced schemas) — not aspirations. Lives outside `components/` so
  * non-component code (the store, `nodeRoles.ts`, etc.) can import it without reaching into
@@ -21,14 +21,17 @@ export type PatternKey =
   | 'delegate'
 
 export interface PatternInfo {
-  /** Badge text (with glyph) shown on the phase row. */
-  badge: string
-  /** Add-button text in the composition pane. */
-  button: string
-  /** Tooltip copy shared by badge + button. */
+  /** Tooltip copy shared by the shelf card and the phase gutter. */
   tip: string
   /** Studio pattern-shelf one-liner: when to reach for this pattern. */
   use: string
+  /**
+   * In→out cardinality signature — how many things the phase consumes vs. what its memory
+   * holds ("N" = one per item of the previous phase, dynamic). What disambiguates the
+   * parallel patterns: fan-out N→N, branches 1→N, map-reduce N→1, verify N→≤N. Compact
+   * (no spaces) so it fits the 44px rundown gutter.
+   */
+  io: string
 }
 
 /** Shelf card order (mirrors the mockup's playbook order top-to-bottom). */
@@ -64,64 +67,54 @@ export const PATTERN_DND_MIME = 'application/x-runorder-pattern'
 
 export const PATTERN_INFO: Record<PatternKey, PatternInfo> = {
   step: {
-    badge: '● Step',
-    button: '+ Step',
     tip: 'One agent runs once. It receives its prompt plus the memories this phase reads; its output becomes this phase’s memory.',
     use: 'one agent, once',
+    io: '1→1',
   },
   fanout: {
-    badge: '⋔ Fan-out',
-    button: '+ Fan-out',
-    tip: 'Dynamic-N parallel copies of one agent — one per item from the previous phase, count capped in-script. The producing phase is schema-forced to { context, items }, so N is exact. Each worker gets the reads plus its one assigned item; the phase’s memory is the array of worker outputs.',
-    use: 'one worker per item, capped',
+    tip: 'Takes the previous phase’s items as a list — that producer is schema-forced to { context, items }, so the count N is exact — and runs one copy of the SAME agent per item, in parallel, capped in-script. Each copy gets the reads plus its one assigned item; the phase’s memory is the array of the copies’ outputs. For different tasks side by side, use branches instead.',
+    use: 'same agent, once per input item',
+    io: 'N→N',
   },
   branches: {
-    badge: '∥ Branches',
-    button: '+ Branches',
     tip: 'Several DIFFERENT agents run once each, in parallel — one phase, N distinct tasks on the same reads (e.g. cast / world / villains after a setting). Outputs are kept in branch order; a later phase that reads this memory gets each branch as its own labeled [name] block, and a following fan-out maps over exactly those N outputs.',
     use: 'different tasks, side by side',
+    io: '1→N',
   },
   loop: {
-    badge: '↻ Loop',
-    button: '+ Loop',
     tip: 'One agent repeated up to max iterations. Each pass it must report { done, output } (runtime-enforced schema); the loop carries output forward as state and stops early when done. Use for iterative refinement toward a condition.',
     use: 'repeat until done, bounded',
+    io: '1→1',
   },
   mapReduce: {
-    badge: '⇉ Map-reduce',
-    button: '+ Map-reduce',
     tip: 'Two stages in one phase: a map agent runs in parallel over the previous phase’s items (capped), then a reduce agent merges all map outputs into one result — which becomes the phase’s memory. Fan-out + synthesis without a separate step.',
     use: 'transform each, then merge',
+    io: 'N→1',
   },
   adversarial: {
-    badge: '⚔ Adversarial',
-    button: '+ Adversarial',
     tip: 'A producer drafts, then a critic attacks the draft (both get the phase’s reads; the critic also gets the draft). The phase’s memory is { draft, critique } — downstream steps see both sides. Use to catch plausible-but-wrong output.',
     use: 'one makes, one breaks',
+    io: '1→1',
   },
   refine: {
-    badge: '⟳ Refine',
-    button: '+ Refine',
     tip: 'A producer drafts, then a judge must report { approved, critique } (runtime-enforced schema). While not approved, the critique is handed back and the producer revises — up to max revisions, stopping early on approval. The phase’s memory is the last draft. Use when the critique should actually get fixed, not just recorded.',
     use: 'draft, judge, revise until approved',
+    io: '1→1',
   },
   verify: {
-    badge: '✓ Verify',
-    button: '+ Verify',
     tip: 'For each item of the previous phase (capped), N independent skeptics each try to REFUTE it — every vote is runtime-enforced to { refuted, reason }. The script then counts votes and keeps only items whose refutals are a strict minority; the phase’s memory is the surviving subset. Use to gate findings before acting on them.',
     use: 'a refuter jury per item; majority gate',
+    io: 'N→≤N',
   },
   multiAngle: {
-    badge: '✳ Multi-angle',
-    button: '+ Multi-angle',
     tip: 'The same agent runs N times in parallel on the same input (independent takes), then a vote agent compares the candidates and picks or synthesizes the best — that verdict is the phase’s memory. Use when one attempt is too hit-or-miss.',
     use: 'N takes, then a vote',
+    io: '1→1',
   },
   delegate: {
-    badge: '⇲ Delegate',
-    button: '+ Delegate',
     tip: 'A+ delegation: a lead agent decides the sub-tasks at run time — it is schema-forced to { context, items } — then a capped fan-out of the granted agent works those items, each grantee receiving the lead’s context. The phase’s memory is the grantees’ outputs.',
     use: 'a lead that spawns helpers',
+    io: '1→N',
   },
 }
 

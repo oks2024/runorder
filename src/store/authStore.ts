@@ -12,6 +12,7 @@
  */
 import { create } from 'zustand'
 import { api, type ApiUser } from '@/api/client'
+import { track } from '@/api/analytics'
 import { navigate } from '@/io/navigation'
 
 export interface AuthState {
@@ -40,6 +41,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
 
   signIn: () => {
+    track('signin_click')
     navigate(
       '/api/auth/login?returnTo=' + encodeURIComponent(location.pathname),
     )

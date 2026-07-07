@@ -142,12 +142,14 @@ describe('Studio rundown — store-bound behavior', () => {
 })
 
 describe('Studio pattern shelf — drag-to-insert', () => {
-  it('renders all ten pattern cards with names and use-lines', () => {
+  it('renders all ten pattern cards with names, use-lines and in→out signatures', () => {
     render(<App />)
     const shelf = screen.getByLabelText('Pattern repertoire')
     for (const kind of PATTERN_ORDER) {
       expect(within(shelf).getByText(PATTERN_NAME[kind])).toBeInTheDocument()
       expect(within(shelf).getByText(PATTERN_INFO[kind].use)).toBeInTheDocument()
+      // io signatures repeat across cards (several patterns are 1→1) — presence, not uniqueness
+      expect(within(shelf).getAllByText(PATTERN_INFO[kind].io).length).toBeGreaterThan(0)
     }
   })
 
@@ -161,9 +163,13 @@ describe('Studio pattern shelf — drag-to-insert', () => {
     expect(screen.getByLabelText('prompt — branch 1')).toBeInTheDocument()
     expect(screen.getByLabelText('prompt — branch 2')).toBeInTheDocument()
 
+    // the gutter's in→out signature shows the real branch count and tracks it
+    expect(screen.getByText('1→2')).toBeInTheDocument()
+
     // grow to three — the remove affordance appears only above the two-branch floor
     fireEvent.click(screen.getByRole('button', { name: '+ branch' }))
     expect(screen.getByDisplayValue('branch-3')).toBeInTheDocument()
+    expect(screen.getByText('1→3')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Remove branch 3' }))
     expect(screen.queryByDisplayValue('branch-3')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Remove branch/ })).not.toBeInTheDocument()
