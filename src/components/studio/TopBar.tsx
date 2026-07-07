@@ -36,20 +36,22 @@ export function TopBar() {
   }
 
   return (
-    <div className="flex items-center gap-4 border-b-2 border-ink bg-paper px-6 py-3">
+    <div className="flex items-center gap-2.5 border-b-2 border-ink bg-paper px-4 py-2.5 md:gap-4 md:px-6 md:py-3">
       <span className="font-mono text-[13px] font-bold tracking-tight text-ink">
         Runorder
       </span>
       <span
         data-testid="doc-label"
-        className="font-mono text-[10px] tracking-[0.18em] text-ink-faint uppercase"
+        className="hidden font-mono text-[10px] tracking-[0.18em] text-ink-faint uppercase md:inline"
       >
         {rehearsing ? 'Rehearsal' : 'Rundown'}
       </span>
-      <span className="font-mono text-[15px] font-semibold text-ink">{spec.name}</span>
+      <span className="min-w-0 truncate font-mono text-[15px] font-semibold text-ink">
+        {spec.name}
+      </span>
       <div className="flex-1" />
 
-      <div className="inline-flex overflow-hidden rounded-lg border border-rule bg-paper-2" role="tablist" aria-label="View">
+      <div className="hidden overflow-hidden rounded-lg border border-rule bg-paper-2 md:inline-flex" role="tablist" aria-label="View">
         <button
           role="tab"
           aria-selected={!rehearsing}
@@ -80,7 +82,7 @@ export function TopBar() {
         aria-pressed={showScript}
         disabled={rehearsing}
         className={cn(
-          'inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px]',
+          'hidden items-center gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] md:inline-flex',
           showScript ? 'border-ink-dim text-ink' : 'border-rule text-ink-dim',
           rehearsing && 'pointer-events-none opacity-40',
         )}
@@ -93,15 +95,28 @@ export function TopBar() {
       </button>
 
       <span
+        title={
+          issueCount === 0
+            ? `valid · est ≤ ${estimateRunSize(spec)} agents`
+            : `${issueCount} issue${issueCount === 1 ? '' : 's'}`
+        }
         className={cn(
-          'font-mono text-[10.5px]',
+          'font-mono text-[10.5px] whitespace-nowrap',
           issueCount === 0 ? 'text-enforced' : 'text-danger',
         )}
       >
         <span aria-hidden>● </span>
-        {issueCount === 0
-          ? `valid · est ≤ ${estimateRunSize(spec)} agents`
-          : `${issueCount} issue${issueCount === 1 ? '' : 's'}`}
+        {/* full text at md+; on mobile just the dot (plus a count when invalid) */}
+        <span className="sr-only md:not-sr-only">
+          {issueCount === 0
+            ? `valid · est ≤ ${estimateRunSize(spec)} agents`
+            : `${issueCount} issue${issueCount === 1 ? '' : 's'}`}
+        </span>
+        {issueCount > 0 && (
+          <span aria-hidden className="md:hidden">
+            {issueCount}
+          </span>
+        )}
       </span>
 
       <LibraryMenu />
@@ -111,7 +126,7 @@ export function TopBar() {
         type="button"
         onClick={copyActive}
         className={cn(
-          'rounded-lg border border-ink bg-ink px-3.5 py-1.5 font-mono text-[12px] font-medium text-paper',
+          'hidden rounded-lg border border-ink bg-ink px-3.5 py-1.5 font-mono text-[12px] font-medium text-paper md:block',
           copied && 'border-enforced bg-enforced',
         )}
       >

@@ -17,7 +17,9 @@ beforeEach(() => {
     view: 'rundown',
     showScript: true,
     promptBookTab: 'script',
+    mobilePane: 'rundown',
     draggingPattern: null,
+    insertAt: null,
     provHover: null,
   })
 })

@@ -2,8 +2,10 @@ import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { useUiStore } from '@/store/uiStore'
-import { emitScriptLines, type EmitLine } from '@/emit/scriptEmitter'
+import { emitScript, emitScriptLines, type EmitLine } from '@/emit/scriptEmitter'
 import { emitPrompt } from '@/emit/promptEmitter'
+import { useCopy } from '@/lib/useCopy'
+import { track } from '@/api/analytics'
 import { PROV_CAPS } from '@/lib/prov'
 import { primaryRef } from '@/lib/nodeRoles'
 import { INHERIT } from '@/lib/models'
@@ -71,29 +73,54 @@ function ScriptLine({ line, no, hue }: { line: EmitLine; no: number; hue?: strin
  * The prompt-book column (mockup `.script`): a togglable pane showing the live emitted artifact —
  * Script (runtime-valid `.js`, per-line two-way provenance) or Prompt (structured-Markdown
  * fallback, a plain `<pre>` — no provenance hover, per the M4 scope: the prompt path isn't the
- * enforced one). Width animates to zero when closed.
+ * enforced one). At md+ it is the side column whose width animates to zero when closed; below
+ * md it is the full-screen Script mode of the mobile bar (`mobilePane`), where it also carries
+ * the Copy button the mobile top bar has no room for.
  */
 export function PromptBook() {
   const spec = useWorkflowStore((s) => s.spec)
   const showScript = useUiStore((s) => s.showScript)
+  const mobilePane = useUiStore((s) => s.mobilePane)
   const promptBookTab = useUiStore((s) => s.promptBookTab)
   const setPromptBookTab = useUiStore((s) => s.setPromptBookTab)
+  const [copied, copy] = useCopy()
 
   const lines = useMemo(() => emitScriptLines(spec), [spec])
   const hues = useMemo(() => phaseHues(spec), [spec])
   const promptArtifact = useMemo(() => emitPrompt(spec), [spec])
 
+  const copyActive = () => {
+    copy(promptBookTab === 'prompt' ? promptArtifact : emitScript(spec))
+    track('workflow_copy', { format: promptBookTab === 'prompt' ? 'prompt' : 'script' })
+  }
+
   return (
     <aside
       aria-label="Emitted script"
-      className="flex flex-none flex-col overflow-hidden border-l border-rule-soft bg-paper-2 transition-[width] duration-200"
-      style={{ width: showScript ? 'min(520px, 42vw)' : 0 }}
+      className={cn(
+        // md+: the fixed side column (width animates open/closed, exactly as before)
+        'flex flex-none flex-col overflow-hidden border-l border-rule-soft bg-paper-2 md:transition-[width] md:duration-200',
+        showScript ? 'md:[width:min(520px,42vw)]' : 'md:[width:0px]',
+        // below md: a full-bleed pane, present only in the mobile bar's Script mode
+        'max-md:min-w-0 max-md:flex-1 max-md:border-l-0',
+        mobilePane !== 'script' && 'max-md:hidden',
+      )}
     >
-      <div className="flex min-h-0 min-w-[460px] flex-1 flex-col">
-        <div className="flex items-baseline gap-2.5 px-5 pt-4 pb-2.5">
+      <div className="flex min-h-0 flex-1 flex-col md:min-w-[460px]">
+        <div className="flex items-baseline gap-2.5 px-4 pt-4 pb-2.5 md:px-5">
           <span className="font-mono text-[10px] tracking-[0.16em] text-ink-dim uppercase">
             The prompt book — exactly what will run
           </span>
+          <button
+            type="button"
+            onClick={copyActive}
+            className={cn(
+              'ml-auto self-center rounded-lg border border-ink bg-ink px-3 py-1.5 font-mono text-[11px] font-medium text-paper md:hidden',
+              copied && 'border-enforced bg-enforced',
+            )}
+          >
+            {copied ? '✓ Copied' : promptBookTab === 'prompt' ? 'Copy prompt' : 'Copy script'}
+          </button>
         </div>
 
         <div className="flex gap-0.5 px-4" role="tablist" aria-label="Artifact projection">

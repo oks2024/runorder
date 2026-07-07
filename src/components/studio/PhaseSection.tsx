@@ -80,15 +80,17 @@ export function PhaseSection({
   return (
     <section
       id={nodeId ? `phase-${nodeId}` : undefined}
-      className="group mt-5 grid grid-cols-[44px_1fr] gap-x-[18px] rounded-[10px]"
+      className="group mt-5 grid grid-cols-[36px_1fr] gap-x-3 rounded-[10px] md:grid-cols-[44px_1fr] md:gap-x-[18px]"
       style={{ '--phue': phue } as CSSProperties}
     >
       <div
-        className="border-r-2 pr-[14px] pt-[3px] text-right font-mono text-[12px] font-semibold text-ink-faint"
+        className="border-r-2 pr-2 pt-[3px] text-right font-mono text-[12px] font-semibold text-ink-faint md:pr-[14px]"
         style={{ borderRightColor: 'var(--phue)' }}
       >
         {index + 1}
-        <span className="mt-1 block text-[9px] tracking-[0.12em] uppercase">{kind}</span>
+        {/* the kind word (e.g. MAP-REDUCE) outgrows the tighter mobile gutter; the sentence
+            below still names the shape, so only md+ carries the label */}
+        <span className="mt-1 hidden text-[9px] tracking-[0.12em] uppercase md:block">{kind}</span>
         <span title="inputs → outputs of this phase" className="mt-0.5 block text-[9px] font-normal">
           {ioLabel(node)}
         </span>
@@ -97,7 +99,7 @@ export function PhaseSection({
           title="Remove phase"
           aria-label={`Remove phase ${index + 1}`}
           onClick={() => removePhase(index)}
-          className="mt-1.5 rounded px-1 text-[13px] leading-none text-ink-faint opacity-0 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100"
+          className="mt-1.5 rounded px-1 text-[13px] leading-none text-ink-faint opacity-0 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100 pointer-coarse:px-1.5 pointer-coarse:py-1 pointer-coarse:text-[15px] pointer-coarse:opacity-60"
         >
           ×
         </button>

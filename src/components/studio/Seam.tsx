@@ -6,16 +6,20 @@ import { PATTERN_DND_MIME, type PatternKey } from '@/lib/patterns'
 import { cn } from '@/lib/utils'
 
 /**
- * A drop seam between (or before) phases (mockup `.seam`): a dashed rule with a "drop a
+ * A drop seam between (or before) phases (mockup `.seam`): a dashed rule with an "insert a
  * pattern here" label, aligned to the phase grid so it reads as an insertion point at exactly
  * this index. Lights ("hot") while *any* shelf card is being dragged — driven by the uiStore
  * flag, not `dragenter` (which bubbles noisily and, on Chromium, can't read `dataTransfer`
  * during `dragover` anyway) — or on hover/focus for mouse users not currently dragging.
+ * The label row is also a button opening the `RepertoireSheet` at this index — the only
+ * insertion path on touch (no HTML5 DnD there), and a keyboard-reachable one everywhere; on
+ * coarse pointers the seam stays visible instead of waiting for a hover that never comes.
  */
 export function Seam({ index }: { index: number }) {
   const insertPattern = useWorkflowStore((s) => s.insertPattern)
   const draggingPattern = useUiStore((s) => s.draggingPattern)
   const setDragging = useUiStore((s) => s.setDragging)
+  const setInsertAt = useUiStore((s) => s.setInsertAt)
 
   // Guards against a duplicate/double `drop` event inserting twice: set synchronously on the
   // first drop (before the store round-trips through a render), reset only when a *new* drag
@@ -46,14 +50,17 @@ export function Seam({ index }: { index: number }) {
     <div
       data-testid={`seam-${index}`}
       data-hot={hot ? 'true' : 'false'}
-      className="group my-1 grid grid-cols-[44px_1fr] gap-x-[18px]"
+      className="group my-1 grid grid-cols-[36px_1fr] gap-x-3 md:grid-cols-[44px_1fr] md:gap-x-[18px]"
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
       <span />
-      <span
+      <button
+        type="button"
+        aria-label={`Insert a pattern as phase ${index + 1}`}
+        onClick={() => setInsertAt(index)}
         className={cn(
-          'flex min-h-5 items-center gap-2.5 opacity-25 group-hover:opacity-100',
+          'flex min-h-5 w-full items-center gap-2.5 rounded-sm opacity-25 outline-none group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus pointer-coarse:min-h-10 pointer-coarse:opacity-70',
           hot && 'opacity-100',
         )}
       >
@@ -69,7 +76,7 @@ export function Seam({ index }: { index: number }) {
             hot && 'text-focus',
           )}
         >
-          ＋ drop a pattern to insert here
+          {hot ? '＋ drop to insert here' : '＋ insert a pattern here'}
         </span>
         <span
           className={cn(
@@ -77,7 +84,7 @@ export function Seam({ index }: { index: number }) {
             hot && 'border-focus',
           )}
         />
-      </span>
+      </button>
     </div>
   )
 }

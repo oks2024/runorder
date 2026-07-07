@@ -31,7 +31,9 @@ beforeEach(() => {
     view: 'rundown',
     showScript: true,
     promptBookTab: 'script',
+    mobilePane: 'rundown',
     draggingPattern: null,
+    insertAt: null,
     provHover: null,
   })
   writeText.mockClear()
@@ -267,6 +269,80 @@ describe('Studio pattern shelf — drag-to-insert', () => {
       expect(root.steps).toHaveLength(4)
       expect(root.steps[3].type).toBe('multiAngle')
     }
+  })
+})
+
+describe('Studio repertoire sheet — tap/click-to-insert (the touch path)', () => {
+  it('clicking a seam opens the sheet; picking a pattern inserts at exactly that index', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Insert a pattern as phase 2' }))
+    expect(useUiStore.getState().insertAt).toBe(1)
+
+    const sheet = screen.getByRole('dialog')
+    fireEvent.click(within(sheet).getByRole('button', { name: `Insert ${PATTERN_NAME.loop}` }))
+
+    const root = useWorkflowStore.getState().spec.root
+    expect(root.type).toBe('sequence')
+    if (root.type === 'sequence') {
+      expect(root.steps).toHaveLength(4)
+      expect(root.steps[1].type).toBe('iterateUntil')
+    }
+    // one pick closes the sheet and disarms the insertion index
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(useUiStore.getState().insertAt).toBeNull()
+  })
+
+  it('clicking the end slot opens the sheet appending after the last phase', () => {
+    render(<App />)
+    fireEvent.click(screen.getByTestId('drop-end'))
+    expect(useUiStore.getState().insertAt).toBe(3)
+
+    const sheet = screen.getByRole('dialog')
+    fireEvent.click(
+      within(sheet).getByRole('button', { name: `Insert ${PATTERN_NAME.multiAngle}` }),
+    )
+
+    const root = useWorkflowStore.getState().spec.root
+    expect(root.type).toBe('sequence')
+    if (root.type === 'sequence') {
+      expect(root.steps).toHaveLength(4)
+      expect(root.steps[3].type).toBe('multiAngle')
+    }
+  })
+
+  it('the sheet lists every pattern and closing it inserts nothing', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Insert a pattern as phase 1' }))
+
+    const sheet = screen.getByRole('dialog')
+    for (const kind of PATTERN_ORDER) {
+      expect(
+        within(sheet).getByRole('button', { name: `Insert ${PATTERN_NAME[kind]}` }),
+      ).toBeInTheDocument()
+    }
+
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const root = useWorkflowStore.getState().spec.root
+    if (root.type === 'sequence') expect(root.steps).toHaveLength(3)
+  })
+})
+
+describe('Studio mobile mode bar', () => {
+  it('switches between rundown, script and rehearsal modes', () => {
+    render(<App />)
+    const bar = screen.getByRole('navigation', { name: 'View' })
+
+    fireEvent.click(within(bar).getByRole('button', { name: 'Script' }))
+    expect(useUiStore.getState().view).toBe('rundown')
+    expect(useUiStore.getState().mobilePane).toBe('script')
+
+    fireEvent.click(within(bar).getByRole('button', { name: 'Rehearse' }))
+    expect(useUiStore.getState().view).toBe('rehearsal')
+
+    fireEvent.click(within(bar).getByRole('button', { name: 'Rundown' }))
+    expect(useUiStore.getState().view).toBe('rundown')
+    expect(useUiStore.getState().mobilePane).toBe('rundown')
   })
 })
 

@@ -28,10 +28,11 @@ export function AuthButton() {
       <button
         type="button"
         onClick={signIn}
-        className="inline-flex items-center gap-2 rounded-lg border border-rule px-3 py-1.5 font-mono text-[11px] text-ink-dim outline-none transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-focus"
+        aria-label="Sign in with GitHub"
+        className="inline-flex items-center gap-2 rounded-lg border border-rule px-2.5 py-2 font-mono text-[11px] text-ink-dim outline-none transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-focus md:px-3 md:py-1.5"
       >
         <GithubMark />
-        Sign in with GitHub
+        <span className="hidden md:inline">Sign in with GitHub</span>
       </button>
     )
   }

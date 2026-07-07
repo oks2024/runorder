@@ -213,10 +213,13 @@ export function LibraryMenu() {
   return (
     <>
       <Menu.Root>
-        <Menu.Trigger className="inline-flex items-center gap-2 rounded-lg border border-rule px-3 py-1.5 font-mono text-[11px] text-ink-dim outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-focus">
+        <Menu.Trigger
+          aria-label="Saved workflows"
+          className="inline-flex items-center gap-2 rounded-lg border border-rule px-2.5 py-2 font-mono text-[11px] text-ink-dim outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-focus md:px-3 md:py-1.5"
+        >
           <FolderOpen size={13} aria-hidden />
-          Saved
-          <ChevronDown size={12} aria-hidden />
+          <span className="hidden md:inline">Saved</span>
+          <ChevronDown size={12} aria-hidden className="hidden md:inline" />
         </Menu.Trigger>
         <Menu.Portal>
           <Menu.Positioner sideOffset={6} align="end" className="z-30">

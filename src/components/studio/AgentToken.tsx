@@ -63,7 +63,7 @@ export function AgentToken({
           }}
           // fixed width + appearance-none: a native select otherwise sizes itself to its
           // widest option and (even at opacity 0) that width would tear the sentence apart
-          className="ml-0.5 w-[14px] cursor-pointer appearance-none rounded border-none bg-transparent p-0 text-center font-mono text-[11px] leading-none text-ink-faint opacity-0 outline-none group-hover/agent:opacity-100 group-focus-within/agent:opacity-100 hover:text-ink-dim focus-visible:opacity-100"
+          className="ml-0.5 w-[14px] cursor-pointer appearance-none rounded border-none bg-transparent p-0 text-center font-mono text-[11px] leading-none text-ink-faint opacity-0 outline-none group-hover/agent:opacity-100 group-focus-within/agent:opacity-100 hover:text-ink-dim focus-visible:opacity-100 pointer-coarse:opacity-60"
         >
           <option value="">▾</option>
           {otherAgents!.map((a) => (

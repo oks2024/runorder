@@ -5,6 +5,31 @@ import { PATTERN_INFO, PATTERN_NAME, PATTERN_DND_MIME, type PatternKey } from '@
 import { PATTERN_GLYPHS } from './glyphs'
 
 /**
+ * The face of a pattern card — topology glyph + name + io + one-liner — shared verbatim by the
+ * shelf card below and the repertoire sheet (`RepertoireSheet`), so the two surfaces can never
+ * drift apart on what a pattern claims about itself.
+ */
+export function PatternCardFace({ kind }: { kind: PatternKey }) {
+  const info = PATTERN_INFO[kind]
+  return (
+    <span className="grid w-full grid-cols-[40px_1fr] items-center gap-[9px]">
+      <span aria-hidden className="h-[27px] w-10 text-ink-dim [&>svg]:h-full [&>svg]:w-full">
+        {PATTERN_GLYPHS[kind]}
+      </span>
+      <span>
+        <span className="flex items-baseline justify-between font-mono text-[11.5px]">
+          <span className="font-semibold text-ink">{PATTERN_NAME[kind]}</span>
+          <span title="inputs → outputs" className="text-[10px] text-ink-faint">
+            {info.io}
+          </span>
+        </span>
+        <span className="block text-[10px] leading-[1.3] text-ink-faint">{info.use}</span>
+      </span>
+    </span>
+  )
+}
+
+/**
  * One shelf card (mockup `.pat`): topology glyph + name + one-liner. A
  * `draggable` button — dragging it out sets `dataTransfer` and flags the uiStore so drop
  * zones (`Seam`/`DropEnd`) light up; a plain click/Enter appends it at the end of the
@@ -41,20 +66,9 @@ export function PatternCard({ kind }: { kind: PatternKey }) {
       onClick={append}
       onKeyDown={onKeyDown}
       title={info.tip}
-      className="mb-[7px] grid w-full cursor-grab grid-cols-[40px_1fr] items-center gap-[9px] rounded-[10px] border border-rule bg-paper px-2.5 py-2.5 text-left shadow-[0_1px_2px_oklch(0_0_0/0.04)] outline-none last:mb-0 hover:border-ink-faint hover:shadow-[0_3px_8px_oklch(0_0_0/0.08)] focus-visible:outline-2 focus-visible:outline-focus active:cursor-grabbing"
+      className="mb-[7px] block w-full cursor-grab rounded-[10px] border border-rule bg-paper px-2.5 py-2.5 text-left shadow-[0_1px_2px_oklch(0_0_0/0.04)] outline-none last:mb-0 hover:border-ink-faint hover:shadow-[0_3px_8px_oklch(0_0_0/0.08)] focus-visible:outline-2 focus-visible:outline-focus active:cursor-grabbing"
     >
-      <span aria-hidden className="h-[27px] w-10 text-ink-dim [&>svg]:h-full [&>svg]:w-full">
-        {PATTERN_GLYPHS[kind]}
-      </span>
-      <span>
-        <span className="flex items-baseline justify-between font-mono text-[11.5px]">
-          <span className="font-semibold text-ink">{PATTERN_NAME[kind]}</span>
-          <span title="inputs → outputs" className="text-[10px] text-ink-faint">
-            {info.io}
-          </span>
-        </span>
-        <span className="block text-[10px] leading-[1.3] text-ink-faint">{info.use}</span>
-      </span>
+      <PatternCardFace kind={kind} />
     </button>
   )
 }

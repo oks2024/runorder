@@ -30,7 +30,7 @@ export function TickRow({
   const isHeroTick = isSwarm && heroTickIndex === tickIndex
 
   return (
-    <div className="mt-[30px] grid grid-cols-[60px_1fr] gap-4">
+    <div className="mt-[30px] grid grid-cols-[52px_1fr] gap-3 md:grid-cols-[60px_1fr] md:gap-4">
       <div className="text-right">
         <div className="font-mono text-[10px] tracking-[0.12em] text-ink-faint">{tick.label}</div>
         <div className="mt-1 font-mono text-[9px] text-ink-faint">

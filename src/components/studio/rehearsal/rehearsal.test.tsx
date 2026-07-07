@@ -10,7 +10,9 @@ beforeEach(() => {
     view: 'rundown',
     showScript: true,
     promptBookTab: 'script',
+    mobilePane: 'rundown',
     draggingPattern: null,
+    insertAt: null,
     provHover: null,
   })
 })
@@ -37,7 +39,9 @@ describe('Rehearsal view — banner + wiring', () => {
     switchToRehearsal()
 
     expect(screen.getByTestId('doc-label')).toHaveTextContent('Rehearsal')
-    expect(screen.getByRole('button', { name: 'Script' })).toBeDisabled()
+    // `pressed` pins the query to the TopBar toggle (the mobile mode bar also has a "Script"
+    // button, but that one carries aria-current, not aria-pressed)
+    expect(screen.getByRole('button', { name: 'Script', pressed: true })).toBeDisabled()
   })
 })
 

@@ -1,4 +1,6 @@
 import { useWorkflowStore } from '@/store/workflowStore'
+import { useUiStore } from '@/store/uiStore'
+import { cn } from '@/lib/utils'
 import type { EditableNode } from './roles'
 import { Masthead } from './Masthead'
 import { Lede } from './Lede'
@@ -16,13 +18,21 @@ import { DropEnd } from './DropEnd'
  */
 export function Rundown() {
   const spec = useWorkflowStore((s) => s.spec)
+  const mobilePane = useUiStore((s) => s.mobilePane)
   const root = spec.root
   const isSequence = root.type === 'sequence'
   const steps = root.type === 'sequence' ? root.steps : []
 
   return (
-    <div className="min-w-0 flex-1 overflow-y-auto">
-      <main className="mx-auto max-w-[720px] px-7 pt-11 pb-24">
+    // Below md the shell is single-pane: while the mobile mode bar shows the script, the
+    // document yields the screen to the PromptBook (and vice versa). Desktop is unaffected.
+    <div
+      className={cn(
+        'min-w-0 flex-1 overflow-y-auto',
+        mobilePane === 'script' && 'max-md:hidden',
+      )}
+    >
+      <main className="mx-auto max-w-[720px] px-4 pt-8 pb-24 md:px-7 md:pt-11">
         <Masthead />
         <Lede />
 

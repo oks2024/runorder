@@ -55,7 +55,7 @@ export function Rehearsal() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[760px] px-7 pt-9 pb-24">
+      <div className="mx-auto max-w-[760px] px-4 pt-6 pb-24 md:px-7 md:pt-9">
         <RehearsalBanner rehearsal={rehearsal} concurrency={spec.caps.concurrency} />
 
         {rehearsal.ticks.map((tick, i) => (

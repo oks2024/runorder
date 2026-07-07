@@ -14,14 +14,14 @@ export function Masthead() {
 
   return (
     <div className="flex items-baseline gap-3">
-      <h1 className="m-0 text-[26px] font-semibold tracking-[-0.01em]">
+      <h1 className="m-0 text-[22px] font-semibold tracking-[-0.01em] md:text-[26px]">
         <ProvSpan keys={PROV_NAME} className="-mx-1 block px-1">
           <input
             aria-label="workflow name"
             value={name}
             spellCheck={false}
             onChange={(e) => setName(e.target.value)}
-            className="w-full border-b border-dashed border-transparent bg-transparent font-mono text-[26px] font-semibold text-ink outline-none hover:border-rule focus:border-focus"
+            className="w-full border-b border-dashed border-transparent bg-transparent font-mono text-[22px] font-semibold text-ink outline-none hover:border-rule focus:border-focus md:text-[26px]"
           />
         </ProvSpan>
       </h1>
