@@ -3,6 +3,7 @@ import { useWorkflowStore } from '@/store/workflowStore'
 import { INHERIT } from '@/lib/models'
 import type { ProvField } from '@/lib/prov'
 import type { Agent, PatternNode } from '@/spec/schema'
+import { isSchemaForced } from '@/emit/plumbing'
 import { PhaseSentence } from './PhaseSentence'
 import { PromptBlock } from './PromptBlock'
 import { FlowNote } from './FlowNote'
@@ -91,8 +92,15 @@ export function PhaseSection({
         {/* the kind word (e.g. MAP-REDUCE) outgrows the tighter mobile gutter; the sentence
             below still names the shape, so only md+ carries the label */}
         <span className="mt-1 hidden text-[9px] tracking-[0.12em] uppercase md:block">{kind}</span>
-        <span title="inputs → outputs of this phase" className="mt-0.5 block text-[9px] font-normal">
-          {ioLabel(node)}
+        <span
+          title={
+            isSchemaForced(phases, index)
+              ? 'inputs → outputs — this phase is schema-forced to end { context, items }; the next phase consumes it as items'
+              : 'inputs → outputs of this phase'
+          }
+          className="mt-0.5 block text-[9px] font-normal"
+        >
+          {ioLabel(node, phases, index)}
         </span>
         <button
           type="button"

@@ -67,7 +67,7 @@ export const PATTERN_DND_MIME = 'application/x-runorder-pattern'
 
 export const PATTERN_INFO: Record<PatternKey, PatternInfo> = {
   step: {
-    tip: 'One agent runs once. It receives its prompt plus the memories this phase reads; its output becomes this phase’s memory.',
+    tip: 'One agent runs once. It receives its prompt plus the memories this phase reads; its output becomes this phase’s memory. If the next phase consumes items (fan-out, map-reduce, verify), this step is schema-forced to end with { context, items } — the rundown then shows it as 1→N.',
     use: 'one agent, once',
     io: '1→1',
   },

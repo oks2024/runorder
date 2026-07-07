@@ -8,6 +8,7 @@
  */
 import { PATTERN_INFO, type PatternKey } from '@/lib/patterns'
 import { primaryRef as primaryRefOrNull } from '@/lib/nodeRoles'
+import { isSchemaForced } from '@/emit/plumbing'
 import type { PatternNode } from '@/spec/schema'
 
 /** Any composition node the rundown renders (everything except a nested sequence). */
@@ -53,11 +54,18 @@ export const KIND_LABEL: Record<PatternKey, string> = {
 
 /**
  * In→out signature shown under the kind label. Static per pattern, except branches — its
- * output count is structural (the script literally runs those k agents), so show the real k.
+ * output count is structural (the script literally runs those k agents), so show the real k —
+ * and except a phase the emitter schema-forces to `{ context, items }` because the *next*
+ * phase fans out over it (`isSchemaForced`): its real output is N items, so everything after
+ * the `→` is replaced with `N` (a step's static `1→1` becomes `1→N`, map-reduce's `N→1`
+ * becomes `N→N`, multi-angle's `1→1` becomes `1→N`) so the gutter never lies about what the
+ * script actually emits.
  */
-export function ioLabel(node: EditableNode): string {
+export function ioLabel(node: EditableNode, phases: PatternNode[], index: number): string {
   if (node.type === 'branches') return `1→${node.branches.length}`
-  return PATTERN_INFO[patternKeyOf(node)].io
+  const io = PATTERN_INFO[patternKeyOf(node)].io
+  if (isSchemaForced(phases, index)) return `${io.split('→')[0]}→N`
+  return io
 }
 
 /** The primary agent ref of a phase (the one that leads the sentence), or '' if unresolvable. */

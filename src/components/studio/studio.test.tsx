@@ -128,6 +128,18 @@ describe('Studio rundown — store-bound behavior', () => {
     expect(screen.getByRole('button', { name: '[n-review?] ×' })).toBeInTheDocument()
   })
 
+  it('a producer feeding a fan-out shows its gutter io as N, not the static 1→1', () => {
+    render(<App />)
+    // phase 1 (reviewer step) feeds the fan-out — schema-forced to { context, items }
+    const phase1 = within(document.getElementById('phase-n-review')!)
+    expect(phase1.getByText('1→N')).toBeInTheDocument()
+    expect(phase1.queryByText('1→1')).not.toBeInTheDocument()
+
+    // phase 3 (synthesizer step) is the last phase — nothing forces it, static 1→1 stands
+    const phase3 = within(document.getElementById('phase-n-synthesize')!)
+    expect(phase3.getByText('1→1')).toBeInTheDocument()
+  })
+
   it('the status pill reports the run-size estimate', () => {
     render(<App />)
     expect(estimateRunSize(useWorkflowStore.getState().spec)).toBe(10)
