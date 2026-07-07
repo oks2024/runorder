@@ -52,7 +52,7 @@ Ten orchestration shapes, each a drag-in building block:
 | **A+ delegation** | a lead that spawns helpers |
 
 Seven are proven by real end-to-end runs against the runtime; **refine**, **verify**, and
-**branches** are built but not yet run-proven, and their shelf cards say so plainly.
+**branches** are built but not yet run-proven.
 
 ## Honesty, by design
 
@@ -63,7 +63,7 @@ The whole point is trust, so Runorder never overclaims:
   runtime merely *requests* is never dressed up as a guarantee.
 - **Exports are one-way.** The workflow you compose is the source of truth; Runorder never tries to
   reconstruct it from a script you hand-edited afterward.
-- **Proven means run, not reviewed.** A pattern is only marked proven once its emitted shape has
+- **Proven means run, not reviewed.** A pattern is only considered proven once its emitted shape has
   executed end-to-end in the real runtime.
 
 ## Status

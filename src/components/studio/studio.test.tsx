@@ -142,16 +142,13 @@ describe('Studio rundown — store-bound behavior', () => {
 })
 
 describe('Studio pattern shelf — drag-to-insert', () => {
-  it('renders all ten pattern cards with names, use-lines, and honest proof chips', () => {
+  it('renders all ten pattern cards with names and use-lines', () => {
     render(<App />)
     const shelf = screen.getByLabelText('Pattern repertoire')
     for (const kind of PATTERN_ORDER) {
       expect(within(shelf).getByText(PATTERN_NAME[kind])).toBeInTheDocument()
       expect(within(shelf).getByText(PATTERN_INFO[kind].use)).toBeInTheDocument()
     }
-    // proven patterns wear the green chip; refine + verify + branches honestly wear the amber one
-    expect(within(shelf).getAllByText('in rep')).toHaveLength(7)
-    expect(within(shelf).getAllByText('not yet in rep')).toHaveLength(3)
   })
 
   it('a branches phase renders one token per branch and can add/remove branches', () => {
