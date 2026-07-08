@@ -22,6 +22,7 @@ dist-ssr
 # Local-only design docs, captured test runs & orchestration state — never published to the repo
 .exarch/
 mockups/
+analytics-guide.md
 /test/
 /MVP.md
 /OpenQuestions.md
