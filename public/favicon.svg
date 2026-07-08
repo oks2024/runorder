@@ -1,10 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
-  <rect width="48" height="48" rx="11" fill="#7e14ff"/>
-  <!-- the sheet, dog-eared top-right -->
-  <path d="M13 9h15l7 7v23H13z" fill="#ede6ff"/>
-  <path d="M28 9v7h7z" fill="#c9b3f5"/>
-  <!-- the play, drawn up on the sheet: start dot, route, arrowhead -->
-  <circle cx="19" cy="33" r="2.8" fill="#7e14ff"/>
-  <path d="M19 33c0-7 4.5-9.5 10-11.5" stroke="#7e14ff" stroke-width="2.6" stroke-linecap="round" fill="none"/>
-  <path d="M29 21.5l-4.4 0.3M29 21.5l-1.6 4.1" stroke="#7e14ff" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <rect width="48" height="48" rx="11" fill="#ffffff"/>
+  <!-- the fan-out: one lead run branching to a parallel cast (Runorder's signature topology) -->
+  <g stroke="#2a2636" fill="#2a2636">
+    <path d="M17 24C24 24 25 15 32 15M17 24h15M17 24C24 24 25 33 32 33" stroke-width="2.1" fill="none" opacity="0.65"/>
+    <circle cx="14" cy="24" r="3.3"/>
+    <circle cx="33" cy="15" r="2.9"/>
+    <circle cx="33" cy="24" r="2.9"/>
+    <circle cx="33" cy="33" r="2.9"/>
+  </g>
 </svg>
