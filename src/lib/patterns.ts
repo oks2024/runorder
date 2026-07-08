@@ -72,12 +72,12 @@ export const PATTERN_INFO: Record<PatternKey, PatternInfo> = {
     io: '1→1',
   },
   fanout: {
-    tip: 'Takes the previous phase’s items as a list — that producer is schema-forced to { context, items }, so the count N is exact — and runs one copy of the SAME agent per item, in parallel, capped in-script. Each copy gets the reads plus its one assigned item; the phase’s memory is the array of the copies’ outputs. For different tasks side by side, use branches instead.',
+    tip: 'Put this after any step — the tool automatically rewires that step to end with { context, items }, so you author only what each agent does and the list-handoff is wired for you (the count N is exact). Fan-out then runs one copy of the SAME agent per item, in parallel, capped in-script. Each copy gets the reads plus its one assigned item; the phase’s memory is the array of the copies’ outputs. For different tasks side by side, use branches instead.',
     use: 'same agent, once per input item',
     io: 'N→N',
   },
   branches: {
-    tip: 'Several DIFFERENT agents run once each, in parallel — one phase, N distinct tasks on the same reads (e.g. cast / world / villains after a setting). Outputs are kept in branch order; a later phase that reads this memory gets each branch as its own labeled [name] block, and a following fan-out maps over exactly those N outputs.',
+    tip: 'Several DIFFERENT agents run once each, in parallel — one phase, N distinct tasks on the same reads (each branch tackles a different facet of the same input). Outputs are kept in branch order; a later phase that reads this memory gets each branch as its own labeled [name] block, and a following fan-out maps over exactly those N outputs.',
     use: 'different tasks, side by side',
     io: '1→N',
   },
@@ -87,7 +87,7 @@ export const PATTERN_INFO: Record<PatternKey, PatternInfo> = {
     io: '1→1',
   },
   mapReduce: {
-    tip: 'Two stages in one phase: a map agent runs in parallel over the previous phase’s items (capped), then a reduce agent merges all map outputs into one result — which becomes the phase’s memory. Fan-out + synthesis without a separate step.',
+    tip: 'Put this after any step — the tool automatically rewires that step to emit its output as a list, so you don’t wire the handoff. Then two stages in one phase: a map agent runs in parallel over those items (capped), then a reduce agent merges all map outputs into one result — which becomes the phase’s memory. Fan-out + synthesis without a separate step.',
     use: 'transform each, then merge',
     io: 'N→1',
   },
@@ -102,7 +102,7 @@ export const PATTERN_INFO: Record<PatternKey, PatternInfo> = {
     io: '1→1',
   },
   verify: {
-    tip: 'For each item of the previous phase (capped), N independent skeptics each try to REFUTE it — every vote is runtime-enforced to { refuted, reason }. The script then counts votes and keeps only items whose refutals are a strict minority; the phase’s memory is the surviving subset. Use to gate findings before acting on them.',
+    tip: 'Put this after any step that produces findings — the tool automatically rewires that step to emit them as a list, so you don’t wire the handoff. Then for each item (capped), N independent skeptics each try to REFUTE it — every vote is runtime-enforced to { refuted, reason }. The script counts votes and keeps only items whose refutals are a strict minority; the phase’s memory is the surviving subset. Use to gate findings before acting on them.',
     use: 'a refuter jury per item; majority gate',
     io: 'N→≤N',
   },
