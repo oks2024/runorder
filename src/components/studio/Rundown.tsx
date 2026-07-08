@@ -2,6 +2,7 @@ import { useWorkflowStore } from '@/store/workflowStore'
 import type { EditableNode } from './roles'
 import { Masthead } from './Masthead'
 import { Lede } from './Lede'
+import { InputNote } from './InputNote'
 import { PhaseSection } from './PhaseSection'
 import { Seam } from './Seam'
 import { DropEnd } from './DropEnd'
@@ -25,6 +26,7 @@ export function Rundown() {
       <main className="mx-auto max-w-[720px] px-7 pt-11 pb-24">
         <Masthead />
         <Lede />
+        <InputNote />
 
         {!isSequence ? (
           <p className="mt-8 rounded-lg border border-danger/40 bg-danger/5 px-4 py-3 text-[13px] text-danger">

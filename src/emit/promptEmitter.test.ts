@@ -16,6 +16,14 @@ describe('emitPrompt — faithfulness contract', () => {
     expect(out).toContain('Caps — concurrency: 8, total: 1000  (intended bounds, not runtime-enforced)')
   })
 
+  it('notes a declared launch input, and omits the note when there is none', () => {
+    const withInput = emitPrompt(codeReviewLoop)
+    expect(withInput).toContain('Launch input (args): **changelist** — Perforce CL to review')
+    expect(withInput).toContain('· receives the launch input [changelist]')
+    const noInput: WorkflowSpec = { ...codeReviewLoop, input: undefined }
+    expect(emitPrompt(noInput)).not.toContain('Launch input (args)')
+  })
+
   it('resolves model aliases to canonical full ids on emit', () => {
     const spec: WorkflowSpec = {
       ...codeReviewLoop,
@@ -158,10 +166,11 @@ describe('emitPrompt — faithfulness contract', () => {
 
       # Workflow: code-review-loop
       Caps — concurrency: 8, total: 1000  (intended bounds, not runtime-enforced)
+      Launch input (args): **changelist** — Perforce CL to review. Provide it as the workflow input; the first phase receives it.
 
       ## Agents (model is authoritative — pin each stage to exactly this model)
       - reviewer → claude-opus-4-8
-          Review the diff on the current branch for correctness bugs and security issues. Group findings by severity and output one finding per item.
+          Run \`p4 describe -S\` on the changelist below to fetch its diff, then review it for correctness bugs and security issues. Group findings by severity and output one finding per item.
       - investigator → claude-sonnet-4-6
           Given a single finding, reproduce it, trace the root cause, and propose the minimal fix.
       - synthesizer → claude-haiku-4-5
@@ -171,7 +180,7 @@ describe('emitPrompt — faithfulness contract', () => {
       Each phase output is a named memory (the agent name below). Give an agent EXACTLY the
       memories its phase reads — nothing else flows implicitly. These are the tool's intended
       semantics; the script path enforces them, this prompt path asks you to honor them.
-      1. step    — reviewer · must END its output with ONLY the list of items to fan out over, one per blank-line-separated block (shared context first, clearly separated)
+      1. step    — reviewer · receives the launch input [changelist] · must END its output with ONLY the list of items to fan out over, one per blank-line-separated block (shared context first, clearly separated)
       2. fan-out — investigator over phase 1 output (dynamic-N, cap 8) · reads: reviewer
       3. step    — synthesizer · reads: investigator
 

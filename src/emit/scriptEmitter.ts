@@ -30,8 +30,8 @@
  */
 import { INHERIT, resolveAlias } from '@/lib/models'
 import { branchLabels, deriveMemoryNames } from '@/lib/memoryNames'
-import { PROV_CAPS, PROV_NAME, provKey, type ProvField } from '@/lib/prov'
-import { isSchemaForced, yieldsItemArray } from './plumbing'
+import { PROV_CAPS, PROV_INPUT, PROV_NAME, provKey, type ProvField } from '@/lib/prov'
+import { consumesItems, isSchemaForced, yieldsItemArray } from './plumbing'
 import type { PatternNode, WorkflowSpec } from '@/spec/schema'
 
 /** Runtime release this emitter was validated against. Static so output stays deterministic. */
@@ -129,6 +129,11 @@ function memoryExpr(info: PhaseInfo): string {
  * offending id when a read can't resolve to an earlier phase (emitted as a loud throw).
  * A branches memory is spliced as one labeled block PER BRANCH (branch order = array order),
  * so the reader sees which sibling produced what — never an unlabeled JSON array.
+ *
+ * At the FIRST phase, if the workflow declares a launch `input` and this phase is not already
+ * an item-consumer (a fan-out/map/verify already reads `args` via `toItems`), the input is
+ * spliced first as a labeled `[label]` block over `asText(args)` — same shape as a read.
+ * `hasInput` lets the caller light `PROV_INPUT` on that (and only that) prompt line.
  */
 function readsSuffix(
   spec: WorkflowSpec,
@@ -136,9 +141,13 @@ function readsSuffix(
   index: number,
   infos: PhaseInfo[],
   byId: Map<string, number>,
-): { suffix: string } | { badRead: string } {
-  const reads = 'reads' in node ? (node.reads ?? []) : []
+): { suffix: string; hasInput: boolean } | { badRead: string } {
   let suffix = ''
+  const hasInput = index === 0 && !!spec.input && !consumesItems(node)
+  if (hasInput && spec.input) {
+    suffix += ` + ${js(`\n\n[${spec.input.label}]\n`)} + asText(args)`
+  }
+  const reads = 'reads' in node ? (node.reads ?? []) : []
   for (const target of reads) {
     const at = byId.get(target)
     if (at === undefined || at >= index) return { badRead: target }
@@ -151,7 +160,7 @@ function readsSuffix(
     }
     suffix += ` + ${js(`\n\n[${info.memoryName}]\n`)} + asText(${memoryExpr(info)})`
   }
-  return { suffix }
+  return { suffix, hasInput }
 }
 
 /**
@@ -220,8 +229,18 @@ function renderPhase(
     }
   }
   const reads = r.suffix
-  const hasReads = reads !== ''
+  // `hasReads` is derived from real read targets (not the suffix), so the `reads` prov key
+  // never lights on a line that carries only the launch-input block.
+  const hasReads = 'reads' in node && (node.reads?.length ?? 0) > 0
+  const hasInput = r.hasInput
   const forcedExtra = info.schemaForced ? ['schema: FANOUT_SCHEMA'] : []
+  /** Prov for a primary prompt line: `prompt` (+ `reads` if any) plus the spec-level
+   *  `PROV_INPUT` when the launch input is spliced here (phase 0, non-item-consumer). */
+  const promptProv = (): string[] | undefined => {
+    const keys = tag('prompt', hasReads && 'reads') ?? []
+    const all = hasInput ? [...keys, PROV_INPUT] : keys
+    return all.length ? all : undefined
+  }
 
   switch (node.type) {
     case 'agent': {
@@ -238,7 +257,7 @@ function renderPhase(
           lines: [
             phaseHead,
             P(`const ${outVar}_lead = await agent(`),
-            P(`  ${js(agent.prompt)}${reads},`, tag('prompt', hasReads && 'reads')),
+            P(`  ${js(agent.prompt)}${reads},`, promptProv()),
             P(
               `  ${agentOpts(agent.model, agent.name, ['schema: FANOUT_SCHEMA'])},`,
               tag('model', 'schema'),
@@ -270,7 +289,7 @@ function renderPhase(
         lines: [
           phaseHead,
           P(`const ${outVar} = await agent(`),
-          P(`  ${js(agent.prompt)}${reads},`, tag('prompt', hasReads && 'reads')),
+          P(`  ${js(agent.prompt)}${reads},`, promptProv()),
           P(
             `  ${agentOpts(agent.model, agent.name, forcedExtra)},`,
             tag('model', info.schemaForced && 'schema'),
@@ -296,7 +315,7 @@ function renderPhase(
           P(`    agent(`),
           P(
             `      ${js(agent.prompt)}${reads} + "\\n\\nYour assigned item:\\n" + asText(item),`,
-            tag('prompt', hasReads && 'reads'),
+            promptProv(),
           ),
           P(`      ${agentOpts(agent.model, agent.name)},`, tag('model')),
           P(`    ),`),
@@ -331,7 +350,7 @@ function renderPhase(
           P(`  const it = await agent(`),
           P(
             `    ${js(agent.prompt)}${reads} + "\\n\\nIteration " + (i + 1) + " of ${node.maxIter}." + (i === 0 ? "" : "\\nPrior state:\\n" + asText(${outVar})),`,
-            tag('prompt', hasReads && 'reads'),
+            promptProv(),
           ),
           P(`    ${agentOpts(agent.model, agent.name, ['schema: LOOP_SCHEMA'])},`, tag('model')),
           P(`  )`),
@@ -359,7 +378,7 @@ function renderPhase(
           P(`    agent(`),
           P(
             `      ${js(mapAgent.prompt)}${reads} + "\\n\\nYour assigned item:\\n" + asText(item),`,
-            tag('prompt', hasReads && 'reads'),
+            promptProv(),
           ),
           P(`      ${agentOpts(mapAgent.model, mapAgent.name)},`, tag('model')),
           P(`    ),`),
@@ -388,7 +407,7 @@ function renderPhase(
         lines: [
           phaseHead,
           P(`const ${outVar}_draft = await agent(`),
-          P(`  ${js(producer.prompt)}${reads},`, tag('prompt', hasReads && 'reads')),
+          P(`  ${js(producer.prompt)}${reads},`, promptProv()),
           P(`  ${agentOpts(producer.model, producer.name)},`, tag('model')),
           P(`)`),
           P(`const ${outVar}_critique = await agent(`),
@@ -420,7 +439,7 @@ function renderPhase(
           P(`  const draft = await agent(`),
           P(
             `    ${js(producer.prompt)}${reads} + "\\n\\nRevision " + (i + 1) + " of ${node.maxIter}." + (i === 0 ? "" : "\\n\\nYour previous draft:\\n" + asText(${outVar}) + "\\n\\nCritique to address:\\n" + asText(${outVar}_note)),`,
-            tag('prompt', hasReads && 'reads'),
+            promptProv(),
           ),
           P(`    ${agentOpts(producer.model, producer.name)},`, tag('model')),
           P(`  )`),
@@ -458,7 +477,7 @@ function renderPhase(
           P(`        agent(`),
           P(
             `          ${js(skeptic.prompt)}${reads} + "\\n\\nVote " + (k + 1) + " of ${node.votes} — independent take. Item to refute:\\n" + asText(item),`,
-            tag('prompt', hasReads && 'reads'),
+            promptProv(),
           ),
           P(
             `          ${optsExprDynamicLabel(skeptic.model, voteLabel, ['schema: VERDICT_SCHEMA'])},`,
@@ -514,7 +533,7 @@ function renderPhase(
           P(`    agent(`),
           P(
             `      ${js(worker.prompt)}${reads} + "\\n\\nAngle " + (k + 1) + " of ${node.angles}.",`,
-            tag('prompt', hasReads && 'reads'),
+            promptProv(),
           ),
           P(`      ${optsExprDynamicLabel(worker.model, angleLabel)},`, tag('model')),
           P(`    ),`),
@@ -759,6 +778,16 @@ export function emitScriptLines(spec: WorkflowSpec): EmitLine[] {
       `// Context flow is explicit: each agent receives ONLY the [memory] blocks its phase reads (plus its pattern's own piping).`,
     ),
   ]
+  if (spec.input) {
+    const desc = spec.input.description ? ` — ${spec.input.description}` : ''
+    // How the input reaches phase 1: a fan-out/map/verify first phase consumes it as items;
+    // any other first phase gets it as a labeled `[label]` prose block.
+    const how =
+      phases.length && consumesItems(phases[0])
+        ? `split into the items phase 1 fans out over`
+        : `spliced into phase 1 as a [${spec.input.label}] block`
+    header.push(ln(`// Launch input (args): ${spec.input.label}${desc} — ${how}.`, [PROV_INPUT]))
+  }
 
   const rendered = phases.map((_, i) => renderPhase(spec, infos, byId, i))
   const lastVar = rendered.length ? rendered[rendered.length - 1].outVar : null

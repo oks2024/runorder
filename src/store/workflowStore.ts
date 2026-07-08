@@ -24,7 +24,7 @@ import { migrateStorageKey } from '@/io/storage'
 import { track } from '@/api/analytics'
 import { codeReviewLoop } from '@/spec/seed'
 import { workflowSpecSchema } from '@/spec/schema'
-import type { Agent, PatternNode, WorkflowSpec } from '@/spec/schema'
+import type { Agent, PatternNode, WorkflowInput, WorkflowSpec } from '@/spec/schema'
 
 const CONCURRENCY_MAX = 16
 const TOTAL_MAX = 1000
@@ -80,6 +80,8 @@ export interface WorkflowState {
 
   // --- workflow-level ---
   setName: (name: string) => void
+  /** Set or clear the launch input (`args`) declaration; `undefined` removes it. */
+  setInput: (input: WorkflowInput | undefined) => void
   setConcurrency: (n: number) => void
   setTotal: (n: number) => void
 
@@ -277,6 +279,12 @@ export const useWorkflowStore = create<WorkflowState>()(
     setName: (name) =>
       set((s) => {
         s.spec.name = name
+      }),
+
+    setInput: (input) =>
+      set((s) => {
+        if (input) s.spec.input = input
+        else delete s.spec.input
       }),
 
     setConcurrency: (n) =>

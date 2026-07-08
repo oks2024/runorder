@@ -124,7 +124,7 @@ describe('emitScriptLines — provenance line records', () => {
     expect(lines.find((l) => l.text === 'phase("Phase 2")')?.phaseIndex).toBe(1)
     expect(lines.find((l) => l.text === 'phase("Phase 3")')?.phaseIndex).toBe(2)
     // The reviewer prompt line belongs to phase 1.
-    const promptLine = lines.find((l) => l.text.includes('Review the diff on the current branch'))
+    const promptLine = lines.find((l) => l.text.includes('p4 describe -S'))
     expect(promptLine?.phaseIndex).toBe(0)
     // All 7 phase indices are present for the all-patterns spec.
     const idxs = new Set(

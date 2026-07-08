@@ -36,6 +36,24 @@ function Segment({ seg }: { seg: ReceiveSegment }) {
         </div>
       )
     }
+    case 'input':
+      return (
+        <div
+          className="relative mb-2 rounded-lg px-3.5 py-2.5"
+          style={{
+            background: 'color-mix(in oklch, var(--color-intended) 4%, var(--color-paper))',
+            border: '1px solid color-mix(in oklch, var(--color-intended) 25%, var(--color-rule))',
+          }}
+        >
+          <SegTag colorVar="var(--color-intended)">[{seg.label}] — launch input (args)</SegTag>
+          <p className="m-0 text-[12px] text-ink-dim italic">{seg.placeholder}</p>
+          <span className="mt-1.5 block font-mono text-[9px] text-ink-faint">
+            {seg.description
+              ? `you pass this when you launch — ${seg.description}`
+              : 'you pass this when you launch the workflow'}
+          </span>
+        </div>
+      )
     case 'read':
       return (
         <div

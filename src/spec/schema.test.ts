@@ -25,6 +25,20 @@ describe('workflowSpecSchema', () => {
     expect(workflowSpecSchema.safeParse(bad).success).toBe(false)
   })
 
+  it('round-trips an optional launch input', () => {
+    const parsed = workflowSpecSchema.parse(codeReviewLoop)
+    expect(parsed.input).toEqual({ label: 'changelist', description: 'Perforce CL to review' })
+    // description is optional; label is required
+    const noInput = { ...codeReviewLoop, input: undefined }
+    expect(workflowSpecSchema.safeParse(noInput).success).toBe(true)
+    expect(
+      workflowSpecSchema.safeParse({ ...codeReviewLoop, input: { label: 'cl' } }).success,
+    ).toBe(true)
+    expect(
+      workflowSpecSchema.safeParse({ ...codeReviewLoop, input: { label: '' } }).success,
+    ).toBe(false)
+  })
+
   it('accepts a deferred pattern type the editor does not yet expose (adversarial)', () => {
     const spec: WorkflowSpec = {
       ...codeReviewLoop,

@@ -287,3 +287,33 @@ describe('Studio agent token — retarget dropdown', () => {
     expect(useWorkflowStore.getState().spec.agents).toHaveLength(2)
   })
 })
+
+describe('Studio launch input — store-bound control', () => {
+  it('shows the seed input, edits it into the emitted script, and removes it', () => {
+    render(<App />)
+    // the seed declares input { label: 'changelist' }
+    const label = screen.getByLabelText('launch input label') as HTMLInputElement
+    expect(label.value).toBe('changelist')
+    // the emitted script splices it into phase 1
+    expect(script().textContent).toContain('[changelist]')
+
+    // edit the label → store + script follow
+    fireEvent.change(label, { target: { value: 'shelf' } })
+    expect(useWorkflowStore.getState().spec.input?.label).toBe('shelf')
+    expect(script().textContent).toContain('[shelf]')
+
+    // remove it → control collapses to the add affordance, script drops the block
+    fireEvent.click(screen.getByLabelText('remove launch input'))
+    expect(useWorkflowStore.getState().spec.input).toBeUndefined()
+    expect(screen.getByText('+ add launch input')).toBeInTheDocument()
+    expect(script().textContent).not.toContain('Launch input (args)')
+  })
+
+  it('adds a launch input to a workflow that has none', () => {
+    act(() => useWorkflowStore.getState().setInput(undefined))
+    render(<App />)
+    fireEvent.click(screen.getByText('+ add launch input'))
+    expect(useWorkflowStore.getState().spec.input).toEqual({ label: 'input' })
+    expect((screen.getByLabelText('launch input label') as HTMLInputElement).value).toBe('input')
+  })
+})
