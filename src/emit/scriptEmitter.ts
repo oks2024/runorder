@@ -133,7 +133,8 @@ function memoryExpr(info: PhaseInfo): string {
  * At the FIRST phase, if the workflow declares a launch `input` and this phase is not already
  * an item-consumer (a fan-out/map/verify already reads `args` via `toItems`), the input is
  * spliced first as a labeled `[label]` block over `asText(args)` — same shape as a read.
- * `hasInput` lets the caller light `PROV_INPUT` on that (and only that) prompt line.
+ * Because it rides the shared suffix, it reaches EVERY agent line in the phase (like a read);
+ * `hasInput` lets the caller light `PROV_INPUT` on each of those prompt lines (via `promptProv`).
  */
 function readsSuffix(
   spec: WorkflowSpec,
@@ -234,10 +235,13 @@ function renderPhase(
   const hasReads = 'reads' in node && (node.reads?.length ?? 0) > 0
   const hasInput = r.hasInput
   const forcedExtra = info.schemaForced ? ['schema: FANOUT_SCHEMA'] : []
-  /** Prov for a primary prompt line: `prompt` (+ `reads` if any) plus the spec-level
-   *  `PROV_INPUT` when the launch input is spliced here (phase 0, non-item-consumer). */
-  const promptProv = (): string[] | undefined => {
-    const keys = tag('prompt', hasReads && 'reads') ?? []
+  /** Prov for a prompt line carrying `${reads}`: the given prompt field (+ `reads` if any)
+   *  plus the spec-level `PROV_INPUT` when the launch input is spliced here (phase 0,
+   *  non-item-consumer). The input block lives in the shared `${reads}` suffix, so EVERY
+   *  agent line in the phase reuses it — pass the line's own field (`prompt`, `prompt2`,
+   *  `prompt${k+1}`) so each lights `PROV_INPUT` and the InputNote hover is two-way. */
+  const promptProv = (field: ProvField = 'prompt'): string[] | undefined => {
+    const keys = tag(field, hasReads && 'reads') ?? []
     const all = hasInput ? [...keys, PROV_INPUT] : keys
     return all.length ? all : undefined
   }
@@ -387,7 +391,7 @@ function renderPhase(
           P(`const ${outVar} = await agent(`),
           P(
             `  ${js(reduceAgent.prompt)}${reads} + "\\n\\nItems to merge:\\n" + asText(${outVar}_mapped),`,
-            tag('prompt2', hasReads && 'reads'),
+            promptProv('prompt2'),
           ),
           P(
             `  ${agentOpts(reduceAgent.model, reduceAgent.name, forcedExtra)},`,
@@ -413,7 +417,7 @@ function renderPhase(
           P(`const ${outVar}_critique = await agent(`),
           P(
             `  ${js(critic.prompt)}${reads} + "\\n\\nProposal to critique:\\n" + asText(${outVar}_draft),`,
-            tag('prompt2', hasReads && 'reads'),
+            promptProv('prompt2'),
           ),
           P(`  ${agentOpts(critic.model, critic.name)},`, tag('model2')),
           P(`)`),
@@ -448,7 +452,7 @@ function renderPhase(
           P(`  const verdict = await agent(`),
           P(
             `    ${js(critic.prompt)}${reads} + "\\n\\nDraft to judge:\\n" + asText(${outVar}),`,
-            tag('prompt2', hasReads && 'reads'),
+            promptProv('prompt2'),
           ),
           P(`    ${agentOpts(critic.model, critic.name, ['schema: REFINE_SCHEMA'])},`, tag('model2')),
           P(`  )`),
@@ -511,7 +515,7 @@ function renderPhase(
         const modelField: ProvField = k === 0 ? 'model' : `model${k + 1}`
         lines.push(
           P(`  () => agent(`),
-          P(`    ${js(agent!.prompt)}${reads},`, tag(promptField, hasReads && 'reads')),
+          P(`    ${js(agent!.prompt)}${reads},`, promptProv(promptField)),
           P(`    ${agentOpts(agent!.model, agent!.name)},`, tag(modelField)),
           P(`  ),`),
         )
@@ -542,7 +546,7 @@ function renderPhase(
           P(`const ${outVar} = await agent(`),
           P(
             `  ${js(voter.prompt)}${reads} + "\\n\\nCandidate answers:\\n" + asText(${outVar}_takes),`,
-            tag('prompt2', hasReads && 'reads'),
+            promptProv('prompt2'),
           ),
           P(
             `  ${agentOpts(voter.model, voter.name, forcedExtra)},`,

@@ -283,7 +283,10 @@ export const useWorkflowStore = create<WorkflowState>()(
 
     setInput: (input) =>
       set((s) => {
-        if (input) s.spec.input = input
+        // A blank label is invalid per schema (`label` is min(1)); persisting it would make
+        // the whole spec fail `mergePersisted`'s parse and silently reset to the seed on the
+        // next load. Treat a blank label as "no input" so the live spec stays loadable.
+        if (input && input.label.trim()) s.spec.input = input
         else delete s.spec.input
       }),
 

@@ -58,6 +58,14 @@ describe('workflowStore — workflow-level', () => {
     expect(spec().input).toBeUndefined()
     expect('input' in spec()).toBe(false) // deleted, not left as undefined
   })
+
+  it('treats a blank label as clearing the input (never persists an invalid spec)', () => {
+    store.getState().setInput({ label: 'changelist' })
+    store.getState().setInput({ label: '' }) // e.g. select-all-delete in the label field
+    expect('input' in spec()).toBe(false)
+    store.getState().setInput({ label: '   ', description: 'x' }) // whitespace-only too
+    expect('input' in spec()).toBe(false)
+  })
 })
 
 describe('workflowStore — agents', () => {

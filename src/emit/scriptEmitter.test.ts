@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { emitScript } from './scriptEmitter'
+import { emitScript, emitScriptLines } from './scriptEmitter'
+import { PROV_INPUT } from '@/lib/prov'
 import { codeReviewLoop } from '@/spec/seed'
 import type { WorkflowSpec } from '@/spec/schema'
 
@@ -420,6 +421,33 @@ describe('emitScript — runtime-faithful contract', () => {
       expect(out).not.toContain('[files]') // no redundant prose block
       // the header note still documents the input
       expect(out).toContain('// Launch input (args): files')
+    })
+
+    it('lights PROV_INPUT on EVERY agent line of a phase-0 multi-agent pattern', () => {
+      // A multiAngle first phase splices the input (via the shared reads suffix) into both the
+      // angle workers AND the voter. Provenance must light on both so the InputNote hover is
+      // two-way — not just on the primary worker line.
+      const spec: WorkflowSpec = {
+        name: 'input-multiangle',
+        input: { label: 'topic', description: 'what to decide' },
+        caps: { concurrency: 8, total: 1000 },
+        agents: [
+          { id: 't', name: 'taker', model: 'inherit', prompt: 'take an angle' },
+          { id: 'v', name: 'voter', model: 'inherit', prompt: 'pick best' },
+        ],
+        root: {
+          type: 'sequence',
+          steps: [{ type: 'multiAngle', agent: 't', angles: 3, vote: 'v', id: 'm1' }],
+        },
+      }
+      // both the worker take AND the voter prompt lines carry the input block, and both light
+      // PROV_INPUT (the worker via `prompt`, the voter via `prompt2`) — not just the primary.
+      // The header `// Launch input (args)…` comment also mentions [topic], so exclude it.
+      const promptLines = emitScriptLines(spec).filter(
+        (l) => l.text.includes('[topic]') && !l.text.startsWith('//'),
+      )
+      expect(promptLines).toHaveLength(2)
+      for (const l of promptLines) expect(l.prov ?? []).toContain(PROV_INPUT)
     })
   })
 
