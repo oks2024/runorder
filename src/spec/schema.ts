@@ -159,9 +159,21 @@ export const patternNodeSchema: z.ZodType<PatternNode> = z.lazy(() =>
   ]),
 )
 
+/**
+ * An optional launch input: what the user passes as the runtime `args` global. When set,
+ * it is spliced into the FIRST phase's prompt as a labeled `[label]` block (see the emitters).
+ * `label` names the block; `description` is a human-facing hint for the approval screen.
+ */
+export const workflowInputSchema = z.object({
+  label: z.string().min(1),
+  description: z.string().optional(),
+})
+export type WorkflowInput = z.infer<typeof workflowInputSchema>
+
 /** The whole workflow. `root` is a `sequence` in V1. */
 export const workflowSpecSchema = z.object({
   name: z.string().min(1),
+  input: workflowInputSchema.optional(),
   caps: capsSchema,
   agents: z.array(agentSchema),
   root: patternNodeSchema,

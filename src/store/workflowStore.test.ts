@@ -50,6 +50,22 @@ describe('workflowStore — workflow-level', () => {
     store.getState().setConcurrency(Number.NaN)
     expect(spec().caps.concurrency).toBe(8)
   })
+
+  it('sets and clears the launch input', () => {
+    store.getState().setInput({ label: 'changelist', description: 'a CL' })
+    expect(spec().input).toEqual({ label: 'changelist', description: 'a CL' })
+    store.getState().setInput(undefined)
+    expect(spec().input).toBeUndefined()
+    expect('input' in spec()).toBe(false) // deleted, not left as undefined
+  })
+
+  it('treats a blank label as clearing the input (never persists an invalid spec)', () => {
+    store.getState().setInput({ label: 'changelist' })
+    store.getState().setInput({ label: '' }) // e.g. select-all-delete in the label field
+    expect('input' in spec()).toBe(false)
+    store.getState().setInput({ label: '   ', description: 'x' }) // whitespace-only too
+    expect('input' in spec()).toBe(false)
+  })
 })
 
 describe('workflowStore — agents', () => {

@@ -86,6 +86,16 @@ describe('rehearse — seed at the cap ceiling', () => {
     expect(ret.collectedInto).toBe('investigator')
   })
 
+  it('gives the first phase the launch input as a labeled segment', () => {
+    // the seed declares input { label: 'changelist' }; phase 1 (reviewer) is a plain step, so
+    // the input is spliced there (after system, before prompt) — not as an item.
+    const reviewer = r.ticks[0].instances[0]
+    expect(reviewer.receives.map((s) => s.kind)).toEqual(['system', 'input', 'prompt', 'returns'])
+    const input = seg(reviewer.receives, 'input')!
+    expect(input.label).toBe('changelist')
+    expect(input.description).toBe('Perforce CL to review')
+  })
+
   it("marks the schema-forced producer's return and the final step's sink", () => {
     // reviewer feeds the fan-out → forced to { context, items }
     const reviewer = r.ticks[0].instances[0]

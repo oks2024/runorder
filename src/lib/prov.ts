@@ -30,6 +30,8 @@ export type ProvField =
 export const PROV_NAME = 'name'
 /** The caps sentence (lede). Spec-level, so it has no node id. */
 export const PROV_CAPS = 'caps'
+/** The launch-input declaration (masthead/lede band). Spec-level, so it has no node id. */
+export const PROV_INPUT = 'input'
 
 /** The provenance key for a node's field: `"<nodeId>:<field>"`. */
 export function provKey(nodeId: string, field: ProvField): string {

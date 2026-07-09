@@ -106,6 +106,7 @@ describe('persist — specsEqual', () => {
       root: codeReviewLoop.root,
       agents: codeReviewLoop.agents,
       caps: codeReviewLoop.caps,
+      input: codeReviewLoop.input,
       name: codeReviewLoop.name,
     } as WorkflowSpec
     expect(specsEqual(codeReviewLoop, reordered)).toBe(true)

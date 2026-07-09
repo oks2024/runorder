@@ -14,11 +14,13 @@ function seg<K extends ReceiveSegment['kind']>(
 /** The compact one-line "gets" summary (mockup `.inst .gets`): what this worker receives and
  * where its output goes, built from its `receives` segments — never invented. */
 function getsLine(instance: RehearsalInstance): string {
+  const input = seg(instance.receives, 'input')
   const read = seg(instance.receives, 'read')
   const item = seg(instance.receives, 'item')
   const returns = seg(instance.receives, 'returns')
 
   const parts: string[] = []
+  if (input) parts.push(`the launch input [${input.label}]`)
   if (read) parts.push(`[${read.memoryName}]`)
   if (item) parts.push(`item ${item.index} of ${item.total}`)
   if (parts.length === 0) parts.push('the task prompt')

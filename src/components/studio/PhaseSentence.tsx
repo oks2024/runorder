@@ -4,7 +4,7 @@ import { deriveMemoryNames } from '@/lib/memoryNames'
 import { isSchemaForced, yieldsItemArray } from '@/emit/plumbing'
 import { referencedAgentIds } from '@/lib/nodeRoles'
 import { INHERIT } from '@/lib/models'
-import { provKey, type ProvField } from '@/lib/prov'
+import { PROV_INPUT, provKey, type ProvField } from '@/lib/prov'
 import type { Agent, PatternNode } from '@/spec/schema'
 import { AgentToken } from './AgentToken'
 import { ModelToken } from './ModelToken'
@@ -93,9 +93,17 @@ export function PhaseSentence({
     )
   }
 
+  /** A labeled `[input]` chip lighting the emitted launch-input line on hover. */
+  const inputChip = (): ReactNode =>
+    spec.input ? (
+      <ProvSpan keys={[PROV_INPUT]}>
+        <span className={mem}>[{spec.input.label}]</span>
+      </ProvSpan>
+    ) : null
+
   /** ⟨source⟩ for a fan-out/map/verify — mirrors the emitter's `itemsExpr`. */
   const source = (): ReactNode => {
-    if (index === 0) return <>the workflow args</>
+    if (index === 0) return spec.input ? inputChip() : <>the workflow args</>
     const prev = phases[index - 1]
     if (isSchemaForced(phases, index - 1) || yieldsItemArray(prev)) {
       const name = deriveMemoryNames(spec)[index - 1]?.name ?? `phase-${index}`
@@ -134,6 +142,7 @@ export function PhaseSentence({
       return (
         <p className={pline}>
           {A(node.agent)} runs once on {M(node.agent, 'model')}
+          {index === 0 && spec.input && <>, receiving the launch input {inputChip()}</>}
         </p>
       )
     }

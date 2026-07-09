@@ -24,7 +24,7 @@
  */
 import { INHERIT, resolveAlias } from '@/lib/models'
 import { branchLabels, deriveMemoryNames } from '@/lib/memoryNames'
-import { isSchemaForced, yieldsItemArray } from '@/emit/plumbing'
+import { consumesItems, isSchemaForced, yieldsItemArray } from '@/emit/plumbing'
 import type { PatternKey } from '@/lib/patterns'
 import type { PatternNode, WorkflowSpec } from '@/spec/schema'
 
@@ -36,6 +36,8 @@ export type ReceiveSegment =
   | { kind: 'system'; text: string }
   /** A named memory this phase reads, spliced as a labeled `[name]` block. */
   | { kind: 'read'; memoryName: string; fromAgent: string; placeholder: string; source: string }
+  /** The workflow's launch input (`args`), spliced into phase 1 as a labeled `[label]` block. */
+  | { kind: 'input'; label: string; description?: string; placeholder: string }
   /** This swarm worker's one assigned item, with 1-based position and its exact provenance. */
   | { kind: 'item'; index: number; total: number; source: string; placeholder: string }
   /** The agent's real prompt text (or a marked placeholder when empty). */
@@ -250,8 +252,18 @@ export function rehearse(spec: WorkflowSpec): Rehearsal {
 
   /** Resolve a node's `reads` to read segments (skipping forward/dangling refs). */
   const resolveReads = (node: PatternNode, index: number): ReceiveSegment[] => {
-    const reads = 'reads' in node ? (node.reads ?? []) : []
     const out: ReceiveSegment[] = []
+    // Phase 1 receives the launch input as a labeled block — unless it already consumes
+    // `args` as items (a fan-out/map/verify), where the input surfaces as the item source.
+    if (index === 0 && spec.input && !consumesItems(node)) {
+      out.push({
+        kind: 'input',
+        label: spec.input.label,
+        description: spec.input.description,
+        placeholder: `‹the ${spec.input.label} you launch with›`,
+      })
+    }
+    const reads = 'reads' in node ? (node.reads ?? []) : []
     for (const target of reads) {
       const at = byIndex.get(target)
       if (at === undefined || at >= index) continue // forward/dangling — surfaced elsewhere
@@ -292,7 +304,8 @@ export function rehearse(spec: WorkflowSpec): Rehearsal {
    */
   const itemSource = (index: number): { upstream: number | null; describe: (k: number) => string } => {
     if (index === 0) {
-      return { upstream: null, describe: () => 'from the workflow args (heuristic split)' }
+      const src = spec.input ? `the launch input [${spec.input.label}]` : 'the workflow args'
+      return { upstream: null, describe: () => `from ${src} (heuristic split)` }
     }
     const prev = phases[index - 1]
     const prevMem = memName(index - 1)

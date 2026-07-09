@@ -19,7 +19,7 @@
  */
 import { INHERIT, resolveAlias } from '@/lib/models'
 import { deriveMemoryNames } from '@/lib/memoryNames'
-import { isSchemaForced } from './plumbing'
+import { consumesItems, isSchemaForced } from './plumbing'
 import type { PatternNode, WorkflowSpec } from '@/spec/schema'
 
 const PHASE_LABEL_WIDTH = 7 // 'fan-out'.length
@@ -66,7 +66,8 @@ function renderPhase(spec: WorkflowSpec, node: PatternNode, index: number): stri
         : base
     }
     case 'fanout': {
-      const over = index === 0 ? 'over the workflow input' : `over phase ${index} output`
+      const inputOver = spec.input ? `over the launch input [${spec.input.label}]` : 'over the workflow input'
+      const over = index === 0 ? inputOver : `over phase ${index} output`
       return (
         `${label('fan-out')}${agentName(spec, node.agent)} ${over} (dynamic-N, cap ${node.cap})`
       )
@@ -132,6 +133,9 @@ function renderPhases(spec: WorkflowSpec): string {
   ]
   phases.forEach((node, i) => {
     let line = renderPhase(spec, node, i)
+    if (i === 0 && spec.input && !consumesItems(node)) {
+      line += ` · receives the launch input [${spec.input.label}]`
+    }
     const reads = 'reads' in node ? (node.reads ?? []) : []
     if (reads.length) {
       const readNames = reads.map((t) => nameById.get(t) ?? `«${t}?»`)
@@ -160,6 +164,12 @@ export function emitPrompt(spec: WorkflowSpec): string {
     `Caps — concurrency: ${spec.caps.concurrency}, total: ${spec.caps.total}  ` +
     `(intended bounds, not runtime-enforced)`
 
+  const input = spec.input
+    ? `Launch input (args): **${spec.input.label}**` +
+      (spec.input.description ? ` — ${spec.input.description}` : '') +
+      '. Provide it as the workflow input; the first phase receives it.'
+    : null
+
   const footer =
     'Before running, show the planned phases, the model per stage, and the per-stage caps for approval.'
 
@@ -168,6 +178,7 @@ export function emitPrompt(spec: WorkflowSpec): string {
     '',
     title,
     caps,
+    ...(input ? [input] : []),
     '',
     renderAgents(spec),
     '',

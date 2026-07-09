@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { emitScript } from './scriptEmitter'
+import { emitScript, emitScriptLines } from './scriptEmitter'
+import { PROV_INPUT } from '@/lib/prov'
 import { codeReviewLoop } from '@/spec/seed'
 import type { WorkflowSpec } from '@/spec/schema'
 
@@ -388,6 +389,68 @@ describe('emitScript — runtime-faithful contract', () => {
     expect(out).not.toContain('toItems(p1)')
   })
 
+  describe('launch input (args)', () => {
+    it('splices the declared input into a plain first step as a labeled [label] block', () => {
+      const out = emitScript(codeReviewLoop) // seed declares input { label: 'changelist' }
+      expect(out).toContain(
+        '// Launch input (args): changelist — Perforce CL to review — spliced into phase 1 as a [changelist] block.',
+      )
+      // the phase-1 reviewer prompt ends with the input block over asText(args)
+      expect(out).toContain('"\\n\\n[changelist]\\n" + asText(args)')
+    })
+
+    it('emits no input block when the workflow declares no input', () => {
+      const noInput: WorkflowSpec = { ...codeReviewLoop, input: undefined }
+      const out = emitScript(noInput)
+      expect(out).not.toContain('Launch input (args)')
+      expect(out).not.toContain('[changelist]')
+    })
+
+    it('does not double-splice when the first phase already consumes args as items', () => {
+      // phase 1 is itself a fan-out → args are the items (toItems(args)); the prose block
+      // would be redundant, so it is omitted.
+      const spec: WorkflowSpec = {
+        name: 'input-fanout',
+        input: { label: 'files', description: 'paths to review' },
+        caps: { concurrency: 8, total: 1000 },
+        agents: [{ id: 'w', name: 'worker', model: 'inherit', prompt: 'work an item' }],
+        root: { type: 'sequence', steps: [{ type: 'fanout', agent: 'w', cap: 4, id: 'n1' }] },
+      }
+      const out = emitScript(spec)
+      expect(out).toContain('toItems(args)') // args still drive the items
+      expect(out).not.toContain('[files]') // no redundant prose block
+      // the header note still documents the input
+      expect(out).toContain('// Launch input (args): files')
+    })
+
+    it('lights PROV_INPUT on EVERY agent line of a phase-0 multi-agent pattern', () => {
+      // A multiAngle first phase splices the input (via the shared reads suffix) into both the
+      // angle workers AND the voter. Provenance must light on both so the InputNote hover is
+      // two-way — not just on the primary worker line.
+      const spec: WorkflowSpec = {
+        name: 'input-multiangle',
+        input: { label: 'topic', description: 'what to decide' },
+        caps: { concurrency: 8, total: 1000 },
+        agents: [
+          { id: 't', name: 'taker', model: 'inherit', prompt: 'take an angle' },
+          { id: 'v', name: 'voter', model: 'inherit', prompt: 'pick best' },
+        ],
+        root: {
+          type: 'sequence',
+          steps: [{ type: 'multiAngle', agent: 't', angles: 3, vote: 'v', id: 'm1' }],
+        },
+      }
+      // both the worker take AND the voter prompt lines carry the input block, and both light
+      // PROV_INPUT (the worker via `prompt`, the voter via `prompt2`) — not just the primary.
+      // The header `// Launch input (args)…` comment also mentions [topic], so exclude it.
+      const promptLines = emitScriptLines(spec).filter(
+        (l) => l.text.includes('[topic]') && !l.text.startsWith('//'),
+      )
+      expect(promptLines).toHaveLength(2)
+      for (const l of promptLines) expect(l.prov ?? []).toContain(PROV_INPUT)
+    })
+  })
+
   it('is deterministic (same spec → identical output)', () => {
     expect(emitScript(codeReviewLoop)).toBe(emitScript(codeReviewLoop))
   })
@@ -398,6 +461,7 @@ describe('emitScript — runtime-faithful contract', () => {
       // Target: claude-code dynamic-workflow runtime · probed 2026-07-02
       // Caps — concurrency 8, total 1000 (fan-out counts are capped in-script; concurrency is the runtime's global cap).
       // Context flow is explicit: each agent receives ONLY the [memory] blocks its phase reads (plus its pattern's own piping).
+      // Launch input (args): changelist — Perforce CL to review — spliced into phase 1 as a [changelist] block.
 
       export const meta = {
         name: "code-review-loop",
@@ -426,7 +490,7 @@ describe('emitScript — runtime-faithful contract', () => {
 
       phase("Phase 1")
       const p1 = await agent(
-        "Review the diff on the current branch for correctness bugs and security issues. Group findings by severity and output one finding per item.",
+        "Run \`p4 describe -S\` on the changelist below to fetch its diff, then review it for correctness bugs and security issues. Group findings by severity and output one finding per item." + "\\n\\n[changelist]\\n" + asText(args),
         { model: "claude-opus-4-8", label: "reviewer", schema: FANOUT_SCHEMA },
       )
 

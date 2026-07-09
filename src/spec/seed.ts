@@ -3,7 +3,7 @@
  * MVP drives end-to-end (emit → run in Claude Code → diff the approval screen).
  *
  * Topology (a flat ordered phase list, per the V1 editor):
- *   1. step    — reviewer      (Opus)   review the diff, one finding per item
+ *   1. step    — reviewer      (Opus)   fetch + review the changelist diff, one finding per item
  *   2. fan-out — investigator  (Sonnet) one per finding, dynamic-N, cap 8
  *   3. step    — synthesizer   (Haiku)  merge into one ranked summary
  *
@@ -35,6 +35,7 @@ export function blankSpec(): WorkflowSpec {
 
 export const codeReviewLoop: WorkflowSpec = {
   name: 'code-review-loop',
+  input: { label: 'changelist', description: 'Perforce CL to review' },
   caps: { concurrency: 8, total: 1000 },
   agents: [
     {
@@ -42,8 +43,9 @@ export const codeReviewLoop: WorkflowSpec = {
       name: 'reviewer',
       model: 'claude-opus-4-8',
       prompt:
-        'Review the diff on the current branch for correctness bugs and security issues. ' +
-        'Group findings by severity and output one finding per item.',
+        'Run `p4 describe -S` on the changelist below to fetch its diff, then review it for ' +
+        'correctness bugs and security issues. Group findings by severity and output one ' +
+        'finding per item.',
     },
     {
       id: 'investigator',
