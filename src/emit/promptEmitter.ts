@@ -20,7 +20,7 @@
 import { INHERIT, resolveAlias } from '@/lib/models'
 import { deriveMemoryNames } from '@/lib/memoryNames'
 import { consumesItems, isSchemaForced } from './plumbing'
-import type { PatternNode, WorkflowSpec } from '@/spec/schema'
+import { launchInput, type PatternNode, type WorkflowSpec } from '@/spec/schema'
 
 const PHASE_LABEL_WIDTH = 7 // 'fan-out'.length
 
@@ -66,7 +66,8 @@ function renderPhase(spec: WorkflowSpec, node: PatternNode, index: number): stri
         : base
     }
     case 'fanout': {
-      const inputOver = spec.input ? `over the launch input [${spec.input.label}]` : 'over the workflow input'
+      const input = launchInput(spec)
+      const inputOver = input ? `over the launch input [${input.label}]` : 'over the workflow input'
       const over = index === 0 ? inputOver : `over phase ${index} output`
       return (
         `${label('fan-out')}${agentName(spec, node.agent)} ${over} (dynamic-N, cap ${node.cap})`
@@ -131,10 +132,11 @@ function renderPhases(spec: WorkflowSpec): string {
     "memories its phase reads — nothing else flows implicitly. These are the tool's intended",
     'semantics; the script path enforces them, this prompt path asks you to honor them.',
   ]
+  const input = launchInput(spec)
   phases.forEach((node, i) => {
     let line = renderPhase(spec, node, i)
-    if (i === 0 && spec.input && !consumesItems(node)) {
-      line += ` · receives the launch input [${spec.input.label}]`
+    if (i === 0 && input && !consumesItems(node)) {
+      line += ` · receives the launch input [${input.label}]`
     }
     const reads = 'reads' in node ? (node.reads ?? []) : []
     if (reads.length) {
@@ -164,9 +166,10 @@ export function emitPrompt(spec: WorkflowSpec): string {
     `Caps — concurrency: ${spec.caps.concurrency}, total: ${spec.caps.total}  ` +
     `(intended bounds, not runtime-enforced)`
 
-  const input = spec.input
-    ? `Launch input (args): **${spec.input.label}**` +
-      (spec.input.description ? ` — ${spec.input.description}` : '') +
+  const li = launchInput(spec)
+  const input = li
+    ? `Launch input (args): **${li.label}**` +
+      (li.description ? ` — ${li.description}` : '') +
       '. Provide it as the workflow input; the first phase receives it.'
     : null
 

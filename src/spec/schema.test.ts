@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { workflowSpecSchema, type WorkflowSpec } from './schema'
+import { launchInput, workflowSpecSchema, type WorkflowSpec } from './schema'
 import { codeReviewLoop } from './seed'
 
 describe('workflowSpecSchema', () => {
@@ -28,7 +28,9 @@ describe('workflowSpecSchema', () => {
   it('round-trips an optional launch input', () => {
     const parsed = workflowSpecSchema.parse(codeReviewLoop)
     expect(parsed.input).toEqual({ label: 'changelist', description: 'Perforce CL to review' })
-    // description is optional; label is required
+    // description is optional. A blank label is shape-VALID (a transient editing state that
+    // must persist without resetting the spec); the non-blank rule is a graph check in
+    // validate.ts (`blank-input-label`), not a Zod constraint.
     const noInput = { ...codeReviewLoop, input: undefined }
     expect(workflowSpecSchema.safeParse(noInput).success).toBe(true)
     expect(
@@ -36,7 +38,14 @@ describe('workflowSpecSchema', () => {
     ).toBe(true)
     expect(
       workflowSpecSchema.safeParse({ ...codeReviewLoop, input: { label: '' } }).success,
-    ).toBe(false)
+    ).toBe(true)
+  })
+
+  it('launchInput() returns the input only when it has a usable name', () => {
+    expect(launchInput(codeReviewLoop)?.label).toBe('changelist')
+    expect(launchInput({ ...codeReviewLoop, input: { label: '' } })).toBeUndefined()
+    expect(launchInput({ ...codeReviewLoop, input: { label: '   ' } })).toBeUndefined()
+    expect(launchInput({ ...codeReviewLoop, input: undefined })).toBeUndefined()
   })
 
   it('accepts a deferred pattern type the editor does not yet expose (adversarial)', () => {

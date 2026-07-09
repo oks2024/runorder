@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { cn } from '@/lib/utils'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { PROV_INPUT } from '@/lib/prov'
 import { ProvSpan } from './ProvSpan'
@@ -9,10 +11,16 @@ import { ProvSpan } from './ProvSpan'
  * a quiet "+ add launch input" affordance opts in; when set, the label (and an optional
  * description) are edit-in-place, with a ✕ to remove. Wrapped in a spec-level `PROV_INPUT`
  * `ProvSpan` so hovering it lights the emitted `[label]` / header lines, and vice versa.
+ *
+ * The row is driven by the RAW `spec.input` (not the `launchInput` guard), so it stays open
+ * even when the name is blanked — only the ✕ removes it. A blank name is a valid transient
+ * state; once the field is left empty (blur), a red "name required" warning is shown until a
+ * name is typed. The empty spec is flagged globally by `validateSpec` (TopBar pill) too.
  */
 export function InputNote() {
   const input = useWorkflowStore((s) => s.spec.input)
   const setInput = useWorkflowStore((s) => s.setInput)
+  const [touched, setTouched] = useState(false)
 
   if (!input) {
     return (
@@ -28,6 +36,8 @@ export function InputNote() {
     )
   }
 
+  const nameMissing = touched && input.label.trim() === ''
+
   return (
     <ProvSpan
       keys={[PROV_INPUT]}
@@ -40,7 +50,11 @@ export function InputNote() {
         value={input.label}
         spellCheck={false}
         onChange={(e) => setInput({ ...input, label: e.target.value })}
-        className="w-[12ch] border-b border-dashed border-rule bg-transparent font-mono text-[14px] text-intended outline-none hover:border-focus focus:border-focus"
+        onBlur={() => setTouched(true)}
+        className={cn(
+          'w-[12ch] border-b border-dashed bg-transparent font-mono text-[14px] text-intended outline-none hover:border-focus focus:border-focus',
+          nameMissing ? 'border-danger' : 'border-rule',
+        )}
       />
       <span className="text-ink-faint">—</span>
       <input
@@ -64,6 +78,11 @@ export function InputNote() {
       >
         ✕
       </button>
+      {nameMissing && (
+        <span role="alert" className="font-mono text-[12px] text-danger">
+          name required
+        </span>
+      )}
     </ProvSpan>
   )
 }

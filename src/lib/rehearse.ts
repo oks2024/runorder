@@ -26,7 +26,7 @@ import { INHERIT, resolveAlias } from '@/lib/models'
 import { branchLabels, deriveMemoryNames } from '@/lib/memoryNames'
 import { consumesItems, isSchemaForced, yieldsItemArray } from '@/emit/plumbing'
 import type { PatternKey } from '@/lib/patterns'
-import type { PatternNode, WorkflowSpec } from '@/spec/schema'
+import { launchInput, type PatternNode, type WorkflowSpec } from '@/spec/schema'
 
 /** One labeled block of a worker's fully-assembled input (see the anatomy card). */
 export type ReceiveSegment =
@@ -255,12 +255,13 @@ export function rehearse(spec: WorkflowSpec): Rehearsal {
     const out: ReceiveSegment[] = []
     // Phase 1 receives the launch input as a labeled block — unless it already consumes
     // `args` as items (a fan-out/map/verify), where the input surfaces as the item source.
-    if (index === 0 && spec.input && !consumesItems(node)) {
+    const input = launchInput(spec)
+    if (index === 0 && input && !consumesItems(node)) {
       out.push({
         kind: 'input',
-        label: spec.input.label,
-        description: spec.input.description,
-        placeholder: `‹the ${spec.input.label} you launch with›`,
+        label: input.label,
+        description: input.description,
+        placeholder: `‹the ${input.label} you launch with›`,
       })
     }
     const reads = 'reads' in node ? (node.reads ?? []) : []
@@ -304,7 +305,8 @@ export function rehearse(spec: WorkflowSpec): Rehearsal {
    */
   const itemSource = (index: number): { upstream: number | null; describe: (k: number) => string } => {
     if (index === 0) {
-      const src = spec.input ? `the launch input [${spec.input.label}]` : 'the workflow args'
+      const input = launchInput(spec)
+      const src = input ? `the launch input [${input.label}]` : 'the workflow args'
       return { upstream: null, describe: () => `from ${src} (heuristic split)` }
     }
     const prev = phases[index - 1]

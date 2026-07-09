@@ -283,10 +283,10 @@ export const useWorkflowStore = create<WorkflowState>()(
 
     setInput: (input) =>
       set((s) => {
-        // A blank label is invalid per schema (`label` is min(1)); persisting it would make
-        // the whole spec fail `mergePersisted`'s parse and silently reset to the seed on the
-        // next load. Treat a blank label as "no input" so the live spec stays loadable.
-        if (input && input.label.trim()) s.spec.input = input
+        // Set unconditionally when defined — a blank label is a valid transient editing state
+        // (the row stays open while the user retypes; it's shape-valid and flagged by
+        // `validateSpec`, not by `safeParse`). Only `undefined` (the ✕) removes the input.
+        if (input) s.spec.input = input
         else delete s.spec.input
       }),
 

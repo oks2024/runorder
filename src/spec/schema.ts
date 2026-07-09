@@ -163,9 +163,16 @@ export const patternNodeSchema: z.ZodType<PatternNode> = z.lazy(() =>
  * An optional launch input: what the user passes as the runtime `args` global. When set,
  * it is spliced into the FIRST phase's prompt as a labeled `[label]` block (see the emitters).
  * `label` names the block; `description` is a human-facing hint for the approval screen.
+ *
+ * `label` is intentionally NOT `min(1)` at the shape level: an in-progress blank name is a
+ * valid transient editing state (the row stays open while the user retypes). The non-blank
+ * requirement is a *graph* rule instead (`validate.ts` — `blank-input-label`), so a blank
+ * name flags the spec as invalid rather than failing `safeParse` and resetting to the seed.
+ * Consumers that splice/show the input route through `launchInput()` so a blank one never
+ * emits an empty `[label]` block.
  */
 export const workflowInputSchema = z.object({
-  label: z.string().min(1),
+  label: z.string(),
   description: z.string().optional(),
 })
 export type WorkflowInput = z.infer<typeof workflowInputSchema>
@@ -179,3 +186,13 @@ export const workflowSpecSchema = z.object({
   root: patternNodeSchema,
 })
 export type WorkflowSpec = z.infer<typeof workflowSpecSchema>
+
+/**
+ * The launch input only when it has a usable name. A blank-label input is authored-but-
+ * invalid (flagged by `validateSpec`) and must never reach the emitters, or it would splice
+ * an empty `[label]` block. Editor components read `spec.input` raw (they must render the
+ * blank state); everything downstream — emitters, rehearsal, phase narration — uses this.
+ */
+export function launchInput(spec: WorkflowSpec): WorkflowInput | undefined {
+  return spec.input && spec.input.label.trim() ? spec.input : undefined
+}

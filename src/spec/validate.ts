@@ -15,9 +15,17 @@
 import type { PatternNode, WorkflowSpec, AgentRef } from './schema'
 
 export interface ValidationIssue {
-  code: 'dangling-ref' | 'delegation-cycle' | 'dangling-read' | 'duplicate-node-id'
+  code:
+    | 'dangling-ref'
+    | 'delegation-cycle'
+    | 'dangling-read'
+    | 'duplicate-node-id'
+    | 'blank-input-label'
   message: string
-  /** The offending ref: an agent ref, a read target node id, or a duplicated node id. */
+  /**
+   * The offending ref: an agent ref, a read target node id, a duplicated node id, or the
+   * blank launch-input label.
+   */
   ref: AgentRef
 }
 
@@ -189,6 +197,16 @@ export function validateSpec(spec: WorkflowSpec): ValidationResult {
   }
 
   collectReadsIssues(spec, issues)
+
+  // A launch input with a blank name is authored-but-unusable: its `[label]` block would be
+  // empty. Shape-valid (see schema.ts) so an in-progress edit persists, but flagged here.
+  if (spec.input && !spec.input.label.trim()) {
+    issues.push({
+      code: 'blank-input-label',
+      ref: spec.input.label,
+      message: 'The launch input needs a name — its [label] block would otherwise be empty.',
+    })
+  }
 
   return issues.length === 0 ? { ok: true } : { ok: false, issues }
 }

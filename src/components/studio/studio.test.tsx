@@ -411,4 +411,30 @@ describe('Studio launch input — store-bound control', () => {
     expect(useWorkflowStore.getState().spec.input).toEqual({ label: 'input' })
     expect((screen.getByLabelText('launch input label') as HTMLInputElement).value).toBe('input')
   })
+
+  it('keeps the row open when the name is emptied; warns only after blur', () => {
+    render(<App />)
+    const label = screen.getByLabelText('launch input label') as HTMLInputElement
+
+    // erase the name — the row stays open (only ✕ removes it), no "+ add" affordance
+    fireEvent.change(label, { target: { value: '' } })
+    expect(screen.getByLabelText('launch input label')).toBeInTheDocument()
+    expect(screen.queryByText('+ add launch input')).not.toBeInTheDocument()
+    // label cleared, but the rest of the input (the seed's description) is preserved
+    expect(useWorkflowStore.getState().spec.input).toMatchObject({ label: '' })
+    // a blank input is not spliced into the emitted script
+    expect(script().textContent).not.toContain('[changelist]')
+    expect(script().textContent).not.toContain('Launch input (args)')
+    // no warning yet — the field is still "focused" (not blurred)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    // leaving the field empty surfaces the red warning
+    fireEvent.blur(label)
+    expect(screen.getByRole('alert')).toHaveTextContent('name required')
+
+    // typing a name clears the warning and re-splices the block
+    fireEvent.change(label, { target: { value: 'shelf' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(script().textContent).toContain('[shelf]')
+  })
 })
