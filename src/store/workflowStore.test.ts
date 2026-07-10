@@ -59,11 +59,16 @@ describe('workflowStore — workflow-level', () => {
     expect('input' in spec()).toBe(false) // deleted, not left as undefined
   })
 
-  it('treats a blank label as clearing the input (never persists an invalid spec)', () => {
+  it('keeps a blank-label input open (only ✕/undefined clears it)', () => {
+    // A blank label is a valid transient editing state — the row stays open while the user
+    // retypes. It's flagged by validateSpec, not deleted. Only undefined (the ✕) removes it.
     store.getState().setInput({ label: 'changelist' })
     store.getState().setInput({ label: '' }) // e.g. select-all-delete in the label field
-    expect('input' in spec()).toBe(false)
+    expect(spec().input).toEqual({ label: '' })
+    expect('input' in spec()).toBe(true)
     store.getState().setInput({ label: '   ', description: 'x' }) // whitespace-only too
+    expect(spec().input).toEqual({ label: '   ', description: 'x' })
+    store.getState().setInput(undefined)
     expect('input' in spec()).toBe(false)
   })
 })

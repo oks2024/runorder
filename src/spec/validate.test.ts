@@ -200,4 +200,18 @@ describe('validateSpec', () => {
     }
     expect(validateSpec(spec)).toEqual({ ok: true })
   })
+
+  it('flags a blank launch-input label (shape-valid, graph-invalid)', () => {
+    const blank = validateSpec({ ...codeReviewLoop, input: { label: '' } })
+    expect(blank.ok).toBe(false)
+    if (!blank.ok) {
+      const issues = blank.issues.filter((i) => i.code === 'blank-input-label')
+      expect(issues).toHaveLength(1)
+    }
+    // whitespace-only counts as blank too
+    expect(validateSpec({ ...codeReviewLoop, input: { label: '   ' } }).ok).toBe(false)
+    // a named input (the seed) and no input at all are both fine
+    expect(validateSpec(codeReviewLoop)).toEqual({ ok: true })
+    expect(validateSpec({ ...codeReviewLoop, input: undefined })).toEqual({ ok: true })
+  })
 })

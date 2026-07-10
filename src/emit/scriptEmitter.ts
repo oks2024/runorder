@@ -32,7 +32,7 @@ import { INHERIT, resolveAlias } from '@/lib/models'
 import { branchLabels, deriveMemoryNames } from '@/lib/memoryNames'
 import { PROV_CAPS, PROV_INPUT, PROV_NAME, provKey, type ProvField } from '@/lib/prov'
 import { consumesItems, isSchemaForced, yieldsItemArray } from './plumbing'
-import type { PatternNode, WorkflowSpec } from '@/spec/schema'
+import { launchInput, type PatternNode, type WorkflowSpec } from '@/spec/schema'
 
 /** Runtime release this emitter was validated against. Static so output stays deterministic. */
 export const RUNTIME_TAG = 'claude-code dynamic-workflow runtime · probed 2026-07-02'
@@ -144,9 +144,10 @@ function readsSuffix(
   byId: Map<string, number>,
 ): { suffix: string; hasInput: boolean } | { badRead: string } {
   let suffix = ''
-  const hasInput = index === 0 && !!spec.input && !consumesItems(node)
-  if (hasInput && spec.input) {
-    suffix += ` + ${js(`\n\n[${spec.input.label}]\n`)} + asText(args)`
+  const input = launchInput(spec)
+  const hasInput = index === 0 && !!input && !consumesItems(node)
+  if (hasInput && input) {
+    suffix += ` + ${js(`\n\n[${input.label}]\n`)} + asText(args)`
   }
   const reads = 'reads' in node ? (node.reads ?? []) : []
   for (const target of reads) {
@@ -782,15 +783,16 @@ export function emitScriptLines(spec: WorkflowSpec): EmitLine[] {
       `// Context flow is explicit: each agent receives ONLY the [memory] blocks its phase reads (plus its pattern's own piping).`,
     ),
   ]
-  if (spec.input) {
-    const desc = spec.input.description ? ` — ${spec.input.description}` : ''
+  const input = launchInput(spec)
+  if (input) {
+    const desc = input.description ? ` — ${input.description}` : ''
     // How the input reaches phase 1: a fan-out/map/verify first phase consumes it as items;
     // any other first phase gets it as a labeled `[label]` prose block.
     const how =
       phases.length && consumesItems(phases[0])
         ? `split into the items phase 1 fans out over`
-        : `spliced into phase 1 as a [${spec.input.label}] block`
-    header.push(ln(`// Launch input (args): ${spec.input.label}${desc} — ${how}.`, [PROV_INPUT]))
+        : `spliced into phase 1 as a [${input.label}] block`
+    header.push(ln(`// Launch input (args): ${input.label}${desc} — ${how}.`, [PROV_INPUT]))
   }
 
   const rendered = phases.map((_, i) => renderPhase(spec, infos, byId, i))
