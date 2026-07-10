@@ -18,7 +18,10 @@
  *     `[name]` blocks. Nothing flows implicitly.
  *   - A producer feeding a fan-out/map (or a delegation lead) is schema-forced to
  *     `{ context, items }` (FANOUT_SCHEMA — same run-validated seam as LOOP_SCHEMA), so
- *     the consumer maps over an exact array; its memory is the shared `context`.
+ *     the consumer maps over an exact array; its memory is the shared `context`. Because
+ *     that split is injected plumbing, the producer's prompt also gets FANOUT_NOTE telling
+ *     it `context` must carry its complete work product (not a summary) — otherwise a
+ *     natural prompt ("do a thorough review") silently loses its findings downstream.
  *   - `toItems` remains only as a heuristic fallback for inputs without an enforced
  *     schema: workflow `args`, and loop/adversarial outputs feeding a fan-out.
  *
@@ -236,6 +239,10 @@ function renderPhase(
   const hasReads = 'reads' in node && (node.reads?.length ?? 0) > 0
   const hasInput = r.hasInput
   const forcedExtra = info.schemaForced ? ['schema: FANOUT_SCHEMA'] : []
+  // A schema-forced producer's prompt also gets FANOUT_NOTE spliced in: the {context, items}
+  // split is injected plumbing, so the tool (not the author) must tell the agent that
+  // `context` is its full work product for everyone downstream — else findings get lost.
+  const forcedNote = info.schemaForced ? ' + FANOUT_NOTE' : ''
   /** Prov for a prompt line carrying `${reads}`: the given prompt field (+ `reads` if any)
    *  plus the spec-level `PROV_INPUT` when the launch input is spliced here (phase 0,
    *  non-item-consumer). The input block lives in the shared `${reads}` suffix, so EVERY
@@ -262,7 +269,7 @@ function renderPhase(
           lines: [
             phaseHead,
             P(`const ${outVar}_lead = await agent(`),
-            P(`  ${js(agent.prompt)}${reads},`, promptProv()),
+            P(`  ${js(agent.prompt)}${reads} + FANOUT_NOTE,`, promptProv()),
             P(
               `  ${agentOpts(agent.model, agent.name, ['schema: FANOUT_SCHEMA'])},`,
               tag('model', 'schema'),
@@ -294,7 +301,7 @@ function renderPhase(
         lines: [
           phaseHead,
           P(`const ${outVar} = await agent(`),
-          P(`  ${js(agent.prompt)}${reads},`, promptProv()),
+          P(`  ${js(agent.prompt)}${reads}${forcedNote},`, promptProv()),
           P(
             `  ${agentOpts(agent.model, agent.name, forcedExtra)},`,
             tag('model', info.schemaForced && 'schema'),
@@ -391,7 +398,7 @@ function renderPhase(
           P(`)).filter(Boolean)`),
           P(`const ${outVar} = await agent(`),
           P(
-            `  ${js(reduceAgent.prompt)}${reads} + "\\n\\nItems to merge:\\n" + asText(${outVar}_mapped),`,
+            `  ${js(reduceAgent.prompt)}${reads}${forcedNote} + "\\n\\nItems to merge:\\n" + asText(${outVar}_mapped),`,
             promptProv('prompt2'),
           ),
           P(
@@ -546,7 +553,7 @@ function renderPhase(
           P(`)).filter(Boolean)`),
           P(`const ${outVar} = await agent(`),
           P(
-            `  ${js(voter.prompt)}${reads} + "\\n\\nCandidate answers:\\n" + asText(${outVar}_takes),`,
+            `  ${js(voter.prompt)}${reads}${forcedNote} + "\\n\\nCandidate answers:\\n" + asText(${outVar}_takes),`,
             promptProv('prompt2'),
           ),
           P(
@@ -610,16 +617,20 @@ function helpers(need: {
   }
   if (need.fanoutSchema) {
     out.push(
-      '// A producer that feeds a fan-out returns shared context + the exact item list',
-      '// (runtime-enforced): downstream readers get `context`, the fan-out maps `items`.',
+      '// A producer that feeds a fan-out returns the exact item list plus `context` — the ONLY',
+      '// other part of its output that flows onward (runtime-enforced): the fan-out maps `items`;',
+      '// downstream readers get `context`.',
       'const FANOUT_SCHEMA = {',
       '  type: "object",',
       '  properties: {',
-      '    context: { type: "string", description: "shared context every downstream reader needs (setting, constraints, decisions)" },',
+      '    context: { type: "string", description: "everything downstream needs from you — your complete findings/results, in full, plus any shared setting or constraints; apart from the items, this is the ONLY part of your output that flows onward" },',
       '    items: { type: "array", items: { type: "string" }, description: "the list to fan out over — one self-contained work item per element" },',
       '  },',
       '  required: ["context", "items"],',
       '}',
+      '// Spliced into every schema-forced producer prompt — the output split is plumbing the',
+      '// author never wrote, so the tool explains it to the agent.',
+      'const FANOUT_NOTE = "\\n\\nYour output is split in two: each entry in `items` becomes one downstream agent\'s work item; `context` is the ONLY other part of your output that flows onward — to the item workers and to any later phase that reads this one. Put your complete findings/results in `context`, in full, not a summary."',
     )
   }
   if (need.loopSchema) {

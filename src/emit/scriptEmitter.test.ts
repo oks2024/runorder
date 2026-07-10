@@ -27,6 +27,15 @@ describe('emitScript — runtime-faithful contract', () => {
     expect(out).not.toContain('function toItems')
   })
 
+  it('splices FANOUT_NOTE into the forced producer prompt (context = full work product)', () => {
+    const out = emitScript(codeReviewLoop)
+    // the injected split is explained to the agent, on the producer's own prompt
+    expect(out).toContain('const FANOUT_NOTE = ')
+    expect(out).toContain('+ asText(args) + FANOUT_NOTE,')
+    // the note appears exactly once — never on unforced agents (fan-out worker, synthesizer)
+    expect(out.match(/ \+ FANOUT_NOTE,/g)).toHaveLength(1)
+  })
+
   it('splices reads as labeled memory blocks (context of a forced producer)', () => {
     const out = emitScript(codeReviewLoop)
     // fan-out workers read the reviewer's shared context, then get their item
@@ -162,6 +171,7 @@ describe('emitScript — runtime-faithful contract', () => {
     const out = emitScript(spec)
     expect(out).toContain('p1.slice(0, 4)')
     expect(out).not.toContain('schema: FANOUT_SCHEMA')
+    expect(out).not.toContain('FANOUT_NOTE') // no forced producer → no note either
   })
 
   it('omits helpers entirely for a single step (nothing to forward-pass)', () => {
@@ -244,6 +254,7 @@ describe('emitScript — runtime-faithful contract', () => {
     expect(out).toContain('const p1_lead = await agent(')
     // the lead is schema-forced; grantees work the exact item list + the lead's context
     expect(out).toContain('label: "lead", schema: FANOUT_SCHEMA')
+    expect(out).toContain('"lead it" + FANOUT_NOTE,') // the lead learns what its context is for
     expect(out).toContain('p1_lead.items.slice(0, 4)')
     expect(out).toContain('"\\n\\n[lead context]\\n" + p1_lead.context')
     expect(out).toContain('detail: "step — lead → claude-opus-4-8 (delegates ≤ 4 to inv → claude-sonnet-4-6)"')
@@ -477,20 +488,24 @@ describe('emitScript — runtime-faithful contract', () => {
       function asText(x) {
         return typeof x === "string" ? x : JSON.stringify(x, null, 2)
       }
-      // A producer that feeds a fan-out returns shared context + the exact item list
-      // (runtime-enforced): downstream readers get \`context\`, the fan-out maps \`items\`.
+      // A producer that feeds a fan-out returns the exact item list plus \`context\` — the ONLY
+      // other part of its output that flows onward (runtime-enforced): the fan-out maps \`items\`;
+      // downstream readers get \`context\`.
       const FANOUT_SCHEMA = {
         type: "object",
         properties: {
-          context: { type: "string", description: "shared context every downstream reader needs (setting, constraints, decisions)" },
+          context: { type: "string", description: "everything downstream needs from you — your complete findings/results, in full, plus any shared setting or constraints; apart from the items, this is the ONLY part of your output that flows onward" },
           items: { type: "array", items: { type: "string" }, description: "the list to fan out over — one self-contained work item per element" },
         },
         required: ["context", "items"],
       }
+      // Spliced into every schema-forced producer prompt — the output split is plumbing the
+      // author never wrote, so the tool explains it to the agent.
+      const FANOUT_NOTE = "\\n\\nYour output is split in two: each entry in \`items\` becomes one downstream agent's work item; \`context\` is the ONLY other part of your output that flows onward — to the item workers and to any later phase that reads this one. Put your complete findings/results in \`context\`, in full, not a summary."
 
       phase("Phase 1")
       const p1 = await agent(
-        "Run \`p4 describe -S\` on the changelist below to fetch its diff, then review it for correctness bugs and security issues. Group findings by severity and output one finding per item." + "\\n\\n[changelist]\\n" + asText(args),
+        "Run \`p4 describe -S\` on the changelist below to fetch its diff, then review it for correctness bugs and security issues. Group findings by severity and output one finding per item." + "\\n\\n[changelist]\\n" + asText(args) + FANOUT_NOTE,
         { model: "claude-opus-4-8", label: "reviewer", schema: FANOUT_SCHEMA },
       )
 

@@ -62,7 +62,9 @@ function renderPhase(spec: WorkflowSpec, node: PatternNode, index: number): stri
       const grant = node.grants && node.grants[0]
       const base = `${label('step')}${agentName(spec, node.agent)}`
       return grant
-        ? `${base} (may delegate to ${agentName(spec, grant.agent)}, ≤ ${grant.cap} instances)`
+        ? `${base} (may delegate to ${agentName(spec, grant.agent)}, ≤ ${grant.cap} instances;` +
+            ` the lead ends its output with ONLY the sub-task list — everything before it is` +
+            ` the full context every delegate receives, complete, not a summary)`
         : base
     }
     case 'fanout': {
@@ -146,7 +148,9 @@ function renderPhases(spec: WorkflowSpec): string {
     if (isSchemaForced(phases, i)) {
       line +=
         ' · must END its output with ONLY the list of items to fan out over,' +
-        ' one per blank-line-separated block (shared context first, clearly separated)'
+        ' one per blank-line-separated block; everything BEFORE the list is the shared' +
+        ' context — the ONLY other part of this output that flows onward, so it must carry' +
+        ' the complete findings/results, in full, not a summary'
     }
     lines.push(line)
   })

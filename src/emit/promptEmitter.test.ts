@@ -180,7 +180,7 @@ describe('emitPrompt — faithfulness contract', () => {
       Each phase output is a named memory (the agent name below). Give an agent EXACTLY the
       memories its phase reads — nothing else flows implicitly. These are the tool's intended
       semantics; the script path enforces them, this prompt path asks you to honor them.
-      1. step    — reviewer · receives the launch input [changelist] · must END its output with ONLY the list of items to fan out over, one per blank-line-separated block (shared context first, clearly separated)
+      1. step    — reviewer · receives the launch input [changelist] · must END its output with ONLY the list of items to fan out over, one per blank-line-separated block; everything BEFORE the list is the shared context — the ONLY other part of this output that flows onward, so it must carry the complete findings/results, in full, not a summary
       2. fan-out — investigator over phase 1 output (dynamic-N, cap 8) · reads: reviewer
       3. step    — synthesizer · reads: investigator
 
